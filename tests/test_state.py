@@ -22,7 +22,7 @@ class StateTests(unittest.TestCase):
         base = Path(self.temp.name)
         self.cp=base/'config.json'
         state.bootstrap(self.cp,base/'db',base/'exchange',2)
-        self.config=json.loads(self.cp.read_text(encoding="utf-8"));self.config['heartbeat_seconds']=5
+        self.config=json.loads(self.cp.read_text(encoding="utf-8"));self.config['heartbeat_seconds']=5;self.config['allow_file_requests']=True
         self.store = state.Store(self.config)
         self.store.export()
 
@@ -192,6 +192,7 @@ class StateTests(unittest.TestCase):
         t = self.store.apply(self.request("finish", task=t, exit_code=0))["task"]
         with self.assertRaises(state.StateError):
             self.store.apply(self.request("accept", "controller", t, checks=None))
+        p.write_text(json.dumps(r))
         self.assertFalse(self.store.process_inbox()[0]["ok"])
 
     def test_failed_file_request_stays_failed_when_capacity_changes(self):
@@ -202,6 +203,7 @@ class StateTests(unittest.TestCase):
         path.write_text(json.dumps(r))
         self.assertFalse(self.store.process_inbox()[0]["ok"])
         self.store.apply(self.request("finish", task=a, exit_code=0))
+        path.write_text(json.dumps(r))
         self.assertFalse(self.store.process_inbox()[0]["ok"])
         self.assertEqual(self.store.get(t["task_id"])["status"], "queued")
 

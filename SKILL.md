@@ -14,7 +14,7 @@ Maintain one shared progress record so the next agent can continue from the last
 
 Use `--config` or `SHARED_TASK_STATE_CONFIG` to join existing state. Only the primary agent bootstraps the first state; do not recreate or redirect existing configuration. Run `join` and `doctor` to check identity and access. If the shared location is inaccessible, report the missing capability rather than initializing another database. See [README.md](README.md) for setup.
 
-With command execution, use `scripts/state.py request --file <json>` directly. Without it, read the exchange overview and task projections, write inbox requests, and read receipts. The file channel needs an execution-capable agent calling `tick` or an optional `watch` consumer. Slack, MCP, and platform hooks are not required.
+Prefer `scripts/state.py request --stdin` without saving shared raw input. File requests are disabled by default. File-only agents need an input-validating gateway; migrate existing inbox users before upgrading. Never use credentials as identity or resource metadata. Configured scanner failures stop persistence. See the README Credentials and safe submission section.
 
 ## Daily workflow
 

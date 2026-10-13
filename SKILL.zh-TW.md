@@ -14,7 +14,7 @@ description: Maintain one shared task record, reserve declared resources, and re
 
 依 `--config` 或 `SHARED_TASK_STATE_CONFIG` 加入既有狀態。首次才由管理者 `bootstrap`；已有設定不重新建立或改址。執行 `join` 與 `doctor` 驗證狀態身分及存取能力。無法讀取共同位置時，回報缺少的權限，不另建資料庫宣稱已加入。初始化說明見 [README.zh-TW.md](README.zh-TW.md)。
 
-有命令列能力時直接使用 `scripts/state.py request --file <json>`；沒有命令列能力時，讀交換目錄的總覽及任務投影，寫 inbox，讀 receipts。純檔案入口需要另一位可執行代理呼叫 `tick` 或選配的 `watch`，不要求 Slack、MCP 或平台掛鉤。
+優先使用 `scripts/state.py request --stdin`，將要求直接傳入，不先存共享檔案。純檔案通道預設停用；只有管理者提供寫入前過濾入口才能安全接入。升級前確認既有 inbox 使用者已改直接提交。憑證不得作為識別碼或防撞目標。選配掃描器失敗時停止保存。詳見 README 的「憑證與安全提交」。
 
 ## 日常流程
 

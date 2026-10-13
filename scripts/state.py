@@ -14,17 +14,17 @@ import tempfile
 import time
 import uuid
 import unicodedata
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from privacy_guard import PrivacyError, scrub as privacy_scrub, check_metadata, guard
 
 
+_CASE_CAPS = {}
 VERSION = 1
 ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 EDITABLE = {"title", "goal", "constraints", "phase", "summary", "last_confirmed_step",
             "verified_facts", "failed_attempts", "next_step", "artifacts", "backups", "blockers"}
 LIST_FIELDS = {"constraints", "verified_facts", "failed_attempts", "artifacts", "backups", "blockers"}
-SECRET = re.compile(r"(?:xox[baprs]-[A-Za-z0-9-]+|sk-(?:proj-)?[A-Za-z0-9_-]{16,}|"
-                    r"Bearer\s+\S+|-----BEGIN [A-Z ]*PRIVATE KEY-----|"
-                    r"(?:api[_-]?key|password|secret|token)\s*[=:]\s*['\"]?[^\s'\",}]{6,})", re.I)
-_CASE_CAPS = {}
+
 
 
 class StateError(Exception):
@@ -38,17 +38,29 @@ def now():
 def safe_id(value):
     if not isinstance(value, str) or not ID.fullmatch(value):
         raise StateError("invalid identifier")
+    metadata(value)
     return value
 
 
 def scrub(value):
-    if isinstance(value, str):
-        return SECRET.sub("<REDACTED>", value)
-    if isinstance(value, list):
-        return [scrub(v) for v in value]
-    if isinstance(value, dict):
-        return {k: scrub(v) for k, v in value.items()}
-    return value
+    try:
+        return privacy_scrub(value)
+    except PrivacyError:
+        raise StateError("privacy guard rejected content") from None
+
+
+def metadata(value):
+    try:
+        return check_metadata(value)
+    except PrivacyError:
+        raise StateError("credentials are forbidden in identifiers and resource metadata") from None
+
+
+def protected(value, scanner=None):
+    try:
+        return guard(value, scanner)
+    except PrivacyError:
+        raise StateError("privacy guard rejected content or scanner unavailable") from None
 
 
 def checked_fields(fields):
@@ -92,6 +104,7 @@ def path_key(path):
 
 
 def resources_checked(resources, refresh=False):
+    metadata(resources)
     if not isinstance(resources, list) or len(resources) > 100:
         raise StateError("resources must be a bounded list")
     out = []
@@ -138,6 +151,7 @@ def write_atomic(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.is_symlink():
         raise StateError("refusing symlink destination")
+    value = scrub(value)
     text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, indent=2) + "\n"
     if path.is_file() and path.read_text(encoding="utf-8") == text:
         return
@@ -200,6 +214,8 @@ def process_state(pid,birth):
 class Store:
     def __init__(self, config, initialize=False, readonly=False):
         validate_config(config)
+        if not isinstance(config.get("allow_file_requests", False), bool):
+            raise StateError("allow_file_requests must be boolean")
         self.config = config
         self.state_id = config['state_id']
         self.root = Path(config['root']).expanduser().resolve()
@@ -250,17 +266,26 @@ class Store:
             self.db.rollback()
             raise
 
+    def protect(self, value):
+        return protected(value, self.config.get("privacy_scanner"))
+
     def all(self):
-        return [json.loads(r[0]) for r in self.db.execute("SELECT data FROM tasks ORDER BY id")]
+        return self.protect([json.loads(r[0]) for r in self.db.execute("SELECT data FROM tasks ORDER BY id")])
 
     def get(self, task_id):
         safe_id(task_id)
         row = self.db.execute("SELECT data FROM tasks WHERE id=?", (task_id,)).fetchone()
         if not row:
             raise StateError("task not found")
-        return json.loads(row[0])
+        return self.protect(json.loads(row[0]))
 
     def save(self, task, actor, action):
+        metadata(actor)
+        for key in ("task_id", "worker", "lease_id", "retired_lease_id", "origin", "resources", "created_by"):
+            if key in task: metadata(task[key])
+        safe = self.protect(task)
+        task.clear()
+        task.update(safe)
         task["updated_at"] = now()
         task["revision"] += 1
         self.db.execute("UPDATE tasks SET data=? WHERE id=?", (json.dumps(task, ensure_ascii=False), task["task_id"]))
@@ -329,15 +354,21 @@ class Store:
     def _apply_locked(self, request):
         if not isinstance(request, dict) or request.get("schema_version") != VERSION:
             raise StateError("schema_version=1 object required")
+        if len(json.dumps(request, ensure_ascii=False).encode()) > 1048576:
+            raise StateError("request exceeds 1 MiB")
         request_id = safe_id(request.get("request_id"))
         actor = safe_id(request.get("actor"))
         digest = hashlib.sha256(json.dumps(request, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        for key in ("request_id", "actor", "task_id", "lease_id", "source_key", "origin", "resources", "execution_pool"):
+            if key in request:
+                metadata(request[key])
+        request = self.protect(request)
         with self.transaction():
             prior = self.db.execute("SELECT digest,result FROM requests WHERE id=?", (request_id,)).fetchone()
             if prior:
                 if prior[0] != digest:
                     raise StateError("request_id reused with different content")
-                return json.loads(prior[1])
+                return self.protect(json.loads(prior[1]))
             op = request.get("op")
             if op == "create":
                 fields = checked_fields(request.get("fields", {}))
@@ -455,7 +486,7 @@ class Store:
                 else:
                     raise StateError("unknown operation")
                 self.save(task, actor, op)
-            result = {"ok": True, "request_id": request_id, "task": task}
+            result = self.protect({"ok": True, "request_id": request_id, "task": task})
             self.db.execute("INSERT INTO requests VALUES(?,?,?)", (request_id, digest, json.dumps(result, ensure_ascii=False)))
         return result
 
@@ -501,8 +532,11 @@ class Store:
         return projection
 
     def process_inbox(self):
+        if not self.config.get("allow_file_requests", False):
+            return []
         results = []
         pending_receipts = []
+        consumed = []
         inbox = self.exchange / "inbox"
         if inbox.is_symlink() or (self.exchange / "receipts").is_symlink():
             raise StateError("refusing symlink file-channel directory")
@@ -512,6 +546,7 @@ class Store:
             if path.is_symlink() or path.stat().st_size > 65536:
                 continue
             request = None
+            raw = None
             unchanged = False
             try:
                 raw = path.read_bytes()
@@ -530,18 +565,20 @@ class Store:
                         pass
             except (json.JSONDecodeError, UnicodeDecodeError):
                 continue  # Muse may still be writing; never consume partial JSON.
-            except (StateError, sqlite3.Error, OSError, AttributeError, TypeError) as exc:
-                outcome = {"ok": False, "error": scrub(str(exc)), "filename": path.name}
-                receipt = self.exchange / "receipts" / path.name
+            except (StateError, sqlite3.Error, OSError, AttributeError, TypeError, RecursionError) as exc:
+                outcome = self.protect({"ok": False, "error": scrub(str(exc)), "filename": path.name})
+                receipt_name = path.name if scrub(path.name) == path.name else "rejected-" + hashlib.sha256(path.name.encode()).hexdigest() + ".json"
+                receipt = self.exchange / "receipts" / receipt_name
                 # A rejected file request stays rejected across restarts. The
                 # controller must read the error and submit a new request id.
-                if isinstance(request, dict) and ID.fullmatch(str(request.get("request_id", ""))) and path.name == request["request_id"] + ".json":
+                if isinstance(request, dict) and ID.fullmatch(str(request.get("request_id", ""))) and scrub(request["request_id"]) == request["request_id"] and path.name == request["request_id"] + ".json":
                     digest = hashlib.sha256(json.dumps(request, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
                     with self.transaction():
                         self.db.execute("INSERT OR IGNORE INTO requests VALUES(?,?,?)",
                                         (request["request_id"], digest, json.dumps(outcome, ensure_ascii=False)))
             if not unchanged:
                 pending_receipts.append((receipt, outcome))
+            consumed.append((path, raw))
             results.append(outcome)
         if pending_receipts:
             # Publish all projections before signalling completion to a
@@ -549,6 +586,9 @@ class Store:
             self.export()
             for receipt, outcome in pending_receipts:
                 write_atomic(receipt, outcome)
+        for path, raw in consumed:
+            if path.is_file() and not path.is_symlink() and path.read_bytes() == raw:
+                path.unlink()
         return results
 
 CONFIG_VERSION=3
@@ -699,7 +739,7 @@ def bootstrap(config_path=None, root=None, exchange=None, local_capacity=None):
                     if p.parts[:2]==('/','Volumes') and len(p.parts)>2:
                         anchors.append(str(Path(*p.parts[:3])))
             config={'schema_version':CONFIG_VERSION,'state_id':str(uuid.uuid4()),'root':str(data),'exchange':str(shared),
-                    'pool_limits':{'local':local_capacity,'cloud':None},'heartbeat_seconds':180,'mount_anchors':list(dict.fromkeys(anchors))}
+                    'pool_limits':{'local':local_capacity,'cloud':None},'heartbeat_seconds':180,'allow_file_requests':False,'mount_anchors':list(dict.fromkeys(anchors))}
             validate_config(config);write_atomic(pending,{'config':str(config_path),'settings':config})
         shared=Path(config['exchange']);shared.mkdir(parents=True,exist_ok=True,mode=0o700)
         marker=shared/'state.json'
@@ -745,7 +785,7 @@ def main():
     p=sub.add_parser('bootstrap');p.add_argument('--root');p.add_argument('--exchange');p.add_argument('--local-capacity',type=int)
     p=sub.add_parser('join');p.add_argument('--state-id')
     sub.add_parser('doctor')
-    p=sub.add_parser('request');p.add_argument('--file',required=True)
+    p=sub.add_parser('request');g=p.add_mutually_exclusive_group(required=True);g.add_argument('--file');g.add_argument('--stdin',action='store_true')
     p=sub.add_parser('read');p.add_argument('task_id')
     p=sub.add_parser('history');p.add_argument('task_id')
     sub.add_parser('overview');sub.add_parser('tick')
@@ -758,7 +798,7 @@ def main():
         else:
             config=_read_config(args.config);store=Store(config)
             if args.cmd=='request':
-                result=store.apply(json.loads(Path(args.file).read_text(encoding='utf-8')));store.export()
+                result=store.apply(json.loads(sys.stdin.read(1048577) if args.stdin else Path(args.file).read_text(encoding='utf-8')));store.export()
             elif args.cmd=='read':result=store.get(args.task_id)
             elif args.cmd=='history':
                 store.get(args.task_id)
@@ -771,8 +811,8 @@ def main():
                     try:processor_tick(store)
                     except (StateError,OSError,sqlite3.Error) as exc:print(json.dumps({'ok':False,'error':scrub(str(exc))}),file=sys.stderr,flush=True)
                     time.sleep(args.interval)
-        print(json.dumps(result,ensure_ascii=False,indent=2));return 0
-    except (StateError,OSError,sqlite3.Error,ValueError,TypeError,KeyError) as exc:
+        print(json.dumps(store.protect(result) if store else protected(result),ensure_ascii=False,indent=2));return 0
+    except (StateError,OSError,sqlite3.Error,ValueError,TypeError,RecursionError,KeyError) as exc:
         print(json.dumps({'ok':False,'error':scrub(str(exc))},ensure_ascii=False),file=sys.stderr);return 1
     finally:
         if store is not None:store.db.close()

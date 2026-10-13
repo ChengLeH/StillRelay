@@ -10,10 +10,10 @@ Install the **entire `shared-task-state` folder** in a skill directory supported
 
 1. Verify that participants can access the same configuration, database, and exchange directory. Check each agent's actual read, write, and execution permissions.
 2. The primary agent runs `python3 scripts/state.py bootstrap` once. Other agents use `python3 scripts/state.py join` to validate and join that existing state. Do not initialize a database per agent.
-3. Run `python3 scripts/state.py doctor` to check that configuration, database, and exchange share the same `state_id`. For file-only agents, also verify that a consumer actually processes their inbox requests.
+3. Run `python3 scripts/state.py doctor` to check that configuration, database, and exchange share the same `state_id`. File-only agents need an input-validating tool or gateway before writing shared files.
 4. Follow [SKILL.md](SKILL.md). Continue by exact task ID and save verified results and the next action.
 
-Agents with command execution use `request --file <json>` to commit a transaction and export updated projections directly. **No daemon is needed.** File-only agents write to `inbox/` and read `receipts/`; an execution-capable agent must call `tick`, or an optional `watch` process can consume requests continuously. Installing skill instructions alone does not process requests.
+Agents with command execution use `request --stdin` to commit and export directly. **No daemon is needed.** The shared file channel is disabled by default; see Credentials and safe submission below for requirements and migration.
 
 ## Bootstrap and join
 
@@ -83,3 +83,15 @@ Share source files only. Keep configuration, task data, databases, exchange dire
 ## License
 
 [MIT](LICENSE). Copyright holder: ChengLeH.
+
+## Credentials and safe submission
+
+Use `python3 scripts/state.py request --stdin` and pass request JSON directly on standard input. This commits and exports synchronously without retaining an incoming request file. `request --file` remains available for an already sanitized, private input file; the caller owns that file and its cleanup. Never copy credentials, environment dumps, full logs, or conversations into task state. Record only their purpose and an approved reference.
+
+The shared write boundary recursively masks known provider tokens, credential assignments, sensitive JSON fields and complete or truncated private-key blocks. Credential-shaped identifiers, source keys, origin and resource metadata are rejected instead of masked, preserving identity and lock behavior. Historical reads, task snapshots, reports, results, and projections pass through the same guard. Request digests use the original input so distinct secret-bearing requests cannot silently share an idempotency receipt.
+
+Optionally configure `privacy_scanner` as an argument array for a trusted offline scanner reading sanitized JSON on stdin. Exit 0 allows it; findings, timeout, missing executable and other failures reject the operation. No scanner is downloaded or required by the portable package. Configure the scanner's network isolation separately; the bundled runner strips inherited environment credentials. Unknown or encoded credentials may evade pattern detection, so this is not a credential vault or an access-control boundary.
+
+Shared file requests are **disabled by default**, including configurations that omit `allow_file_requests`. Existing installations that use inbox must switch to direct submission before upgrading. Read-only overview/task access is unchanged. A file-only agent needs a tool or gateway that validates input before writing shared files; merely loading this skill cannot create that capability. Administrators may explicitly set `allow_file_requests: true` for a trusted file channel, but raw requests can be read before consumption and remain after a crash or partial write. Valid processed inputs are deleted only after export and receipt publication; this cleanup does not remove the exposure window. OS file permissions cannot separate agents using the same account.
+
+For a macOS/Linux caller already in a sandbox that cannot launch a nested scanner sandbox, optionally run `scripts/privacy_scan_service.py --socket <local-socket> --serve-config <host-settings.json>` as a trusted host process. The host settings contain `{"scanner": ["<offline-scanner-command>", "<args>"]}`. Set the state's `privacy_scanner` to `["<absolute-python>", "<absolute-privacy_scan_service.py>", "--socket", "<local-socket>"]`. The broker uses only a local Unix socket, never persists or echoes content, bounds input and fails closed when unavailable. The host owns startup and restart; no service is automatically installed. This optional helper is tested on macOS/Linux; Windows uses the direct scanner command. It does not authenticate separate OS users or grant file access.

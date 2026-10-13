@@ -42,7 +42,7 @@ A successful result includes the new revision and current `lease_id`. Then updat
 {"schema_version":1,"request_id":"update-001","actor":"worker-a","op":"update","task_id":"actual-task-id","expected_revision":2,"lease_id":"actual-lease-id","fields":{"last_confirmed_step":"First part verified","next_step":"Handle the second part"}}
 ```
 
-Save JSON in a file and submit it using the README's `request --file` command. File-only agents instead write it to `inbox/claim-001.json` or `inbox/update-001.json` under the configured exchange directory, then read `receipts/` there. Do not use fixed example revisions or leases as real values.
+Save JSON in a file and submit it using the README's `request --file` command. Only when explicitly enabled, trusted file-only agents write it to `inbox/claim-001.json` or `inbox/update-001.json` under the configured exchange directory, then read `receipts/` there. Do not use fixed example revisions or leases as real values.
 
 ## Execution pools and resources
 
@@ -64,10 +64,12 @@ Stop evidence must cover the current agent and child workers it started, stating
 
 ## File-only channel
 
+Disabled by default. Raw input is exposed before processing. Prefer `request --stdin`; see README for migration, limitations and optional settings.
+
 Read the overview, then `tasks/<task_id>.json` before updating. Write complete JSON to `inbox/<request_id>.json`, matching the filename to the request ID. If renaming is available, write a temporary file first and rename it to `.json`. Read `receipts/<request_id>.json`; only `ok=true` means success. If no receipt exists, inspect the original task and consumer instead of dispatching the same action again. After a failure receipt, reread current state and submit corrected content with a new ID.
 
 Execution-capable agents use `request --file <json>` directly without a background service. File-only requests need a `tick` or `watch` consumer. Doctor checks identity and capabilities; it does not replace actual receipt verification.
 
 ## Platforms and permissions
 
-The first release supports cooperation on one host under one user. macOS has been tested; Linux and Windows have not been validated on real machines. Implementation branches and mapping fixtures are not machine-level acceptance. Preserve platform access differences: the skill does not provision credentials, elevate permissions, or replay external side effects automatically. Older formats need explicit migration, not silently created replacement state IDs.
+The first release supports cooperation on one host under one user. Hosted CI covers macOS, Linux and Windows; real agent and permission integrations still need separate acceptance. Preserve platform access differences: the skill does not provision credentials, elevate permissions, or replay external side effects automatically. Older formats need explicit migration, not silently created replacement state IDs.

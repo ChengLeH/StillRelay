@@ -138,7 +138,7 @@ class BootstrapTests(unittest.TestCase):
             with self.assertRaisesRegex(state.StateError,'still alive'):self.request(s,'release',t,stop_confirmed=True,stop_evidence='not enough while live')
         finally:s.db.close()
     def test_file_watch_restart_keeps_identity_and_receipts(self):
-        r=state.bootstrap(self.cp);ex=Path(r['exchange']);rid='file-only-fixture'
+        r=state.bootstrap(self.cp);cfg=self.config();cfg['allow_file_requests']=True;self.cp.write_text(json.dumps(cfg));ex=Path(r['exchange']);rid='file-only-fixture'
         (ex/'inbox'/(rid+'.json')).write_text(json.dumps({'schema_version':1,'request_id':rid,'actor':'file-controller','op':'create','execution_pool':'cloud','read_only':True,'resources':[],'fields':{'title':'fixture','goal':'verify'}}))
         for i in range(2):
             p=subprocess.Popen([sys.executable,'-B',str(SCRIPT),'--config',str(self.cp),'watch','--interval','0.5'],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)

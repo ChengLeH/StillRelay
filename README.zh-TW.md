@@ -8,10 +8,10 @@
 
 1. 確認所有參與者能存取同一份設定、資料庫與交換目錄，以及各自實際具有哪些讀寫或執行權限。
 2. 首位管理者執行 `python3 scripts/state.py bootstrap`；後續代理執行 `python3 scripts/state.py join` 加入既有狀態。不要每位代理各建一份資料庫。
-3. 執行 `python3 scripts/state.py doctor`，確認設定、資料庫與交換目錄的 `state_id` 一致。若有只能讀寫檔案的代理，另外確認請求消費者能處理其 inbox。
+3. 執行 `python3 scripts/state.py doctor`，確認設定、資料庫與交換目錄的 `state_id` 一致。只能讀寫檔案的代理需另有寫入前驗證入口。
 4. 讀 [SKILL.zh-TW.md](SKILL.zh-TW.md)，以確切任務 ID 接續工作，保存已驗證結果與下一步。
 
-有命令列能力的代理使用 `request --file <json>`，直接提交交易並更新投影，不需要常駐服務。只能讀寫檔案的代理寫入 inbox 並讀取 receipts；需要一個有執行能力的代理呼叫 `tick`，或選配 `watch` 常駐處理。只安裝技能文字不會自動消費檔案請求。
+有命令列能力的代理使用 `request --stdin`，直接提交並更新投影，不需要常駐服務。純檔案通道預設停用；必要條件與既有安裝遷移見下方「憑證與安全提交」。
 
 ## 初始化與加入
 
@@ -62,7 +62,7 @@ python3 scripts/state.py --config "<共用設定檔完整路徑>" join --state-i
 
 這是同一主機、同一使用者信任範圍內的協作契約。`actor` 是協作識別，租約是擁有者檢查；它們不是帳號認證，也不是強制沙箱。技能不放寬任何平台原有權限，也不能阻止繞過共用入口的程式修改資源。
 
-45 個測試已在本機 macOS，以及 GitHub 提供的 macOS、Linux、Windows 執行環境通過，涵蓋 Python 3.10 與 3.14。這些驗證涵蓋狀態工具，不代表每個代理平台與使用者權限設定都已完成整合驗收。跨主機與網路檔案系統不在第一版驗證範圍。可查看 [自動測試結果](https://github.com/ChengLeH/shared-task-state/actions/workflows/tests.yml)。詳細請求格式見 [資料契約](references/protocol.zh-TW.md)。
+回歸測試已在本機 macOS，以及 GitHub 提供的 macOS、Linux、Windows 執行環境通過，涵蓋 Python 3.10 與 3.14。這些驗證涵蓋狀態工具，不代表每個代理平台與使用者權限設定都已完成整合驗收。跨主機與網路檔案系統不在第一版驗證範圍。可查看 [自動測試結果](https://github.com/ChengLeH/shared-task-state/actions/workflows/tests.yml)。詳細請求格式見 [資料契約](references/protocol.zh-TW.md)。
 
 ## 測試
 
@@ -81,3 +81,15 @@ Windows 可使用 `py -3 -m unittest discover -s tests -p "test_*.py"`。
 ## 授權
 
 採用 [MIT 授權](LICENSE)，著作權人為公開帳號 ChengLeH。
+
+## 憑證與安全提交
+
+優先使用 `python3 scripts/state.py request --stdin`，將要求 JSON（資料格式）直接提供到標準輸入。交易與投影同步完成，不保留原始要求檔案。`request --file` 仍可用於已脫敏、位於私人位置的輸入檔案；該檔案由提交者負責清理。不得把憑證、環境變數清單、完整日誌或對話複製到狀態，只記錄用途及已核准的取得方式。
+
+所有寫入入口會遞迴遮罩已知供應商憑證、憑證指定值、敏感 JSON 欄位及完整或截斷的私鑰區塊。識別碼、來源鍵、來源與防撞目標含憑證時直接拒絕，避免遮罩造成身分或鎖定目標碰撞。歷史讀取、任務快照、報告、結果及投影也經過相同防護。冪等性（同一請求重送不重做）的摘要以原始要求計算，避免不同憑證內容被當成同一個請求。
+
+可在設定的 `privacy_scanner` 指定可信任離線掃描器的參數陣列，以標準輸入接收遮罩後 JSON。結束碼 0 才通過；有發現、逾時、程式不存在或其他故障都拒絕。可攜版本不強制安裝或下載掃描器；掃描器的網路隔離由管理者另外設定。啟動器不繼承環境中的憑證。未知或編碼後的憑證仍可能無法辨識，這不是憑證保管庫或權限隔離系統。
+
+**預設停用共享檔案提交**，未設定 `allow_file_requests` 也會停用。既有使用 inbox（收件匣）的安裝，升級前應改為直接提交；總覽與任務讀取不變。只有檔案能力的代理，需要工具或閘道在寫入共享檔案前驗證內容，光載入技能無法建立此能力。管理者可明確設 `allow_file_requests: true` 啟用可信任檔案通道，但原始要求在處理前仍可被讀取，當機或未寫完時也可能殘留。成功處理的輸入只在投影及回執發布後移除；這無法消除暴露窗口。同一帳號的代理也無法只靠作業系統檔案權限隔離。
+
+若 macOS／Linux 的呼叫者已在沙盒裡，無法再啟動掃描沙盒，可選配由可信任主機程序執行 `scripts/privacy_scan_service.py --socket <本機連線位置> --serve-config <主機設定.json>`。主機設定內容為 `{"scanner": ["<離線掃描器命令>", "<參數>"]}`，狀態設定的 `privacy_scanner` 改為 `["<Python絕對路徑>", "<privacy_scan_service.py絕對路徑>", "--socket", "<本機連線位置>"]`。程序只使用 Unix socket（本機通訊端），不保存或回傳輸入原文，限制輸入大小；程序不可用時拒絕保存。啟動及重啟由主機管理，不自動安裝服務。此選配工具測試 macOS／Linux；Windows 使用直接掃描命令。它不提供跨帳號驗證，也不授予檔案權限。

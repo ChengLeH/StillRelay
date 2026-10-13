@@ -42,7 +42,7 @@ SQLite（交易式資料庫）保存權威任務與版本歷史。交換目錄�
 {"schema_version":1,"request_id":"update-001","actor":"worker-a","op":"update","task_id":"actual-task-id","expected_revision":2,"lease_id":"actual-lease-id","fields":{"last_confirmed_step":"已驗證第一部分","next_step":"處理第二部分"}}
 ```
 
-上述 JSON 可放檔案，使用 README 的 `request --file` 命令提交；純檔案代理則將它寫進設定中 `exchange` 所指的 `inbox/claim-001.json` 或 `inbox/update-001.json`，並讀取同一交換目錄的 `receipts/` 回執。不能把範例中的固定版本與租約直接當成正式值。
+上述 JSON 可放檔案，使用 README 的 `request --file` 命令提交；僅在明確啟用時，可信任純檔案代理將它寫進設定中 `exchange` 所指的 `inbox/claim-001.json` 或 `inbox/update-001.json`，並讀取同一交換目錄的 `receipts/` 回執。不能把範例中的固定版本與租約直接當成正式值。
 
 ## 執行池與資源
 
@@ -64,10 +64,12 @@ SQLite（交易式資料庫）保存權威任務與版本歷史。交換目錄�
 
 ## 純檔案入口
 
+預設停用；處理前的原始檔案有暴露風險。優先使用 `request --stdin`；限制、遷移與選配設定見 README。
+
 讀總覽，更新前讀 `tasks/<task_id>.json`；寫完整 JSON 至 `inbox/<request_id>.json`，檔名需符合請求 ID。能重新命名時先寫暫存檔，再改為 `.json`。讀 `receipts/<request_id>.json`，只有 `ok=true` 才成功。沒有回執時先查原任務及消費者，不另派同一動作。失敗回執後重新讀取現況，以新 ID 提交修正請求。
 
 有命令列能力的代理直接 `request --file <json>`，不需背景服務。純檔案代理的請求需要 `tick` 或 `watch` 消費者；`doctor` 用於查證狀態一致與相關能力，不能替代實際回執驗收。
 
 ## 平台與權限
 
-第一版限同一主機、同一使用者合作。macOS 為實測平台；Linux 與 Windows 尚未經實機驗收，程式分支與路徑映射不等於實機驗收。保留所在平台的存取權限差異，技能不安裝憑證、不升權、不自動重跑外部副作用。既有舊格式應明確遷移，不能靜默另建不同 `state_id`。
+第一版限同一主機、同一使用者合作。託管自動測試涵蓋 macOS、Linux 與 Windows；實際代理及權限接入仍需另外驗收。保留所在平台的存取權限差異，技能不安裝憑證、不升權、不自動重跑外部副作用。既有舊格式應明確遷移，不能靜默另建不同 `state_id`。
