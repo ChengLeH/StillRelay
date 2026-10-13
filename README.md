@@ -64,7 +64,7 @@ Both release and requeue require `stop_confirmed=true` and nonempty `stop_eviden
 
 This is a cooperation contract for one host within one user's trust boundary. `actor` identifies a participant, and leases check ownership; neither provides account authentication or an enforced sandbox. The skill preserves platform permissions and cannot prevent programs that bypass its entry points from changing resources.
 
-macOS is the validated platform for the first release. Linux and Windows have implementation branches and default path mappings, but **have not been validated on real machines**. Mapping fixtures do not establish full platform support. Cross-host use and network filesystems are outside the first release's verified scope. See the [protocol](references/protocol.md) for request formats.
+The 45-test suite passes locally on macOS and on GitHub-hosted macOS, Linux, and Windows runners with Python 3.10 and 3.14. These checks cover the helper; they do not establish integration with every agent platform or user permission setup. Cross-host use and network filesystems are outside the first release's verified scope. See the [automated test results](https://github.com/ChengLeH/shared-task-state/actions/workflows/tests.yml). See the [protocol](references/protocol.md) for request formats.
 
 ## Tests
 
