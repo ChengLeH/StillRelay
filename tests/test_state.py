@@ -22,7 +22,7 @@ class StateTests(unittest.TestCase):
         base = Path(self.temp.name)
         self.cp=base/'config.json'
         state.bootstrap(self.cp,base/'db',base/'exchange',2)
-        self.config=json.loads(self.cp.read_text());self.config['heartbeat_seconds']=5
+        self.config=json.loads(self.cp.read_text(encoding="utf-8"));self.config['heartbeat_seconds']=5
         self.store = state.Store(self.config)
         self.store.export()
 
@@ -134,13 +134,15 @@ class StateTests(unittest.TestCase):
         self.assertEqual(self.store.process_inbox(), [])
         path.write_text(json.dumps(r))
         s = state.Store(self.config)
-        self.assertTrue(s.process_inbox()[0]["ok"])
-        s.export()
-        receipt = json.loads((path.parent.parent / "receipts" / path.name).read_text())
-        self.assertEqual(receipt["task"]["created_by"], "controller")
-        s.process_inbox()
-        self.assertEqual(len(s.all()), 1)
-        s.db.close()
+        try:
+            self.assertTrue(s.process_inbox()[0]["ok"])
+            s.export()
+            receipt = json.loads((path.parent.parent / "receipts" / path.name).read_text(encoding="utf-8"))
+            self.assertEqual(receipt["task"]["created_by"], "controller")
+            s.process_inbox()
+            self.assertEqual(len(s.all()), 1)
+        finally:
+            s.db.close()
 
 
     def test_acceptance_requires_independent_evidence(self):
@@ -217,7 +219,7 @@ class StateTests(unittest.TestCase):
         stale=self.request("finish", "worker-b", current,exit_code=0,report="STALE OVERRIDE");stale["lease_id"]=old["lease_id"]
         with self.assertRaisesRegex(state.StateError,"ownership"):
             self.store.apply(stale)
-        self.assertEqual(path.read_text(),"CURRENT EVIDENCE")
+        self.assertEqual(path.read_text(encoding="utf-8"),"CURRENT EVIDENCE")
 
     def test_cloud_third_distinct_target_allowed(self):
         tasks=[self.create(execution_pool='cloud') for _ in range(3)]

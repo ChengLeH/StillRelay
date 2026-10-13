@@ -47,7 +47,7 @@ class BootstrapTests(unittest.TestCase):
         winners=[r for p,r in results if p.returncode==0]
         self.assertEqual(len(winners),1,results)
         self.assertEqual(state.join(winners[0]['config'])['state_id'],winners[0]['state_id'])
-        self.assertEqual(json.loads((exchange/'state.json').read_text())['state_id'],winners[0]['state_id'])
+        self.assertEqual(json.loads((exchange/'state.json').read_text(encoding="utf-8"))['state_id'],winners[0]['state_id'])
 
     def test_join_missing_does_not_create_configuration(self):
         with self.assertRaisesRegex(state.StateError,'not found'):state.join(self.cp)
@@ -88,7 +88,7 @@ class BootstrapTests(unittest.TestCase):
             return real(path,value)
         with patch.object(state,'write_atomic',side_effect=fail_config):
             with self.assertRaises(OSError):state.bootstrap(self.cp)
-        pending=json.loads(self.cp.with_name('.bootstrap.pending.json').read_text());expected=pending['settings']['state_id']
+        pending=json.loads(self.cp.with_name('.bootstrap.pending.json').read_text(encoding="utf-8"));expected=pending['settings']['state_id']
         r=state.bootstrap(self.cp);self.assertEqual(r['state_id'],expected);self.assertFalse(self.cp.with_name('.bootstrap.pending.json').exists())
     def test_invalid_capacity_does_not_create_state(self):
         with self.assertRaisesRegex(state.StateError,'pool'):state.bootstrap(self.cp,local_capacity=0)
@@ -147,7 +147,7 @@ class BootstrapTests(unittest.TestCase):
                 while not (ex/'receipts'/(rid+'.json')).exists() and time.monotonic()<deadline:time.sleep(.05)
                 self.assertTrue((ex/'receipts'/(rid+'.json')).exists());self.assertEqual(state.join(self.cp)['state_id'],r['state_id'])
             finally:p.terminate();p.communicate(timeout=5)
-        self.assertTrue(json.loads((ex/'receipts'/(rid+'.json')).read_text())['ok'])
+        self.assertTrue(json.loads((ex/'receipts'/(rid+'.json')).read_text(encoding="utf-8"))['ok'])
 
 
 if __name__=='__main__':unittest.main()
