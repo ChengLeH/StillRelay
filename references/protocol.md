@@ -1,0 +1,73 @@
+[English](protocol.md) | [繁體中文](protocol.zh-TW.md)
+
+# Protocol
+
+SQLite stores authoritative tasks and revision history. The exchange overview and `tasks/<task_id>.json` are read-only projections; do not edit them directly. Configuration, database, and exchange `state.json` must have the same `state_id`. Join validates existing state without creating a database.
+
+## Requests and receipts
+
+Use a new `request_id` for each new action. Replaying the same ID with the same content returns its existing result; different content with the same ID is rejected. `actor` is a freely chosen cooperation identity, not account authentication.
+
+```json
+{"schema_version":1,"request_id":"example-create-001","actor":"controller","op":"create","execution_pool":"cloud","resources":[{"kind":"unscoped","mode":"write"}],"fields":{"title":"Authorized task","goal":"Investigate the issue and complete the authorized change","next_step":"Worker inspects current state"}}
+```
+
+Updates use the latest `expected_revision` to reject stale writes. Claim creates the current `lease_id` and execution generation. Worker update, heartbeat, finish, and release use the same identity and lease. A successful receipt reflects that transaction's revision; reread current state before the next update.
+
+| Operation | Required content and behavior |
+| --- | --- |
+| `create` | `fields.title` and `fields.goal`; declare the pool and targets before execution |
+| `plan` | `task_id`, `expected_revision`; modify content or declarations only in a safe planning state |
+| `claim` | `task_id`, `expected_revision`, worker `actor`; acquire all declared targets or none |
+| `update` | Task ID, revision, current lease, `fields`; save actual verified results |
+| `heartbeat` | Task ID, revision, current lease; refresh liveness information and potentially increase revision |
+| `finish` | Task ID, revision, current lease, integer `exit_code`; 0 means worker completion awaiting acceptance, otherwise failure or blockage |
+| `release` | Task ID, revision, current lease, `stop_confirmed=true`, nonempty `stop_evidence`; reject a verified live original process |
+| `requeue` | Task ID, revision, `stop_confirmed=true`, nonempty `stop_evidence` and `resume_evidence`; check side effects before queueing again |
+| `accept` | A controller different from the worker; `checks.source`, `checks.diff`, `checks.tests`, and `checks.runtime` must each contain actual evidence text |
+
+Common progress fields `title`, `goal`, `phase`, `summary`, `last_confirmed_step`, and `next_step` are strings. `constraints`, `verified_facts`, `failed_attempts`, `artifacts`, `backups`, and `blockers` are arrays of strings. Record evidence and backup paths rather than secret contents.
+
+## Minimal claim and update examples
+
+First read `tasks/<task_id>.json`. Replace the example IDs, revisions, and lease with actual values, and reread the current revision before each update.
+
+```json
+{"schema_version":1,"request_id":"claim-001","actor":"worker-a","op":"claim","task_id":"actual-task-id","expected_revision":1}
+```
+
+A successful result includes the new revision and current `lease_id`. Then update progress:
+
+```json
+{"schema_version":1,"request_id":"update-001","actor":"worker-a","op":"update","task_id":"actual-task-id","expected_revision":2,"lease_id":"actual-lease-id","fields":{"last_confirmed_step":"First part verified","next_step":"Handle the second part"}}
+```
+
+Save JSON in a file and submit it using the README's `request --file` command. File-only agents instead write it to `inbox/claim-001.json` or `inbox/update-001.json` under the configured exchange directory, then read `receipts/` there. Do not use fixed example revisions or leases as real values.
+
+## Execution pools and resources
+
+Use `local` or `cloud` for `execution_pool`. Both default to `null` capacity, meaning unlimited. Bootstrap can set `--local-capacity 2`. Resource exclusion applies across pools; the backend is not inferred from the actor's name.
+
+```json
+[{"kind":"path","path":"/absolute/project/file.txt","mode":"write"},{"kind":"service","name":"logical-service-id","mode":"write"}]
+```
+
+Paths are absolute file or directory paths; a directory reservation covers descendants. Services use stable logical identifiers. Readers may share; overlapping targets involving a writer are exclusive. `unscoped/write` conservatively conflicts with any target when scope is unknown. `read_only=true` with `resources=[]` declares no write side effects and no specific reserved targets; it must not be used to bypass locks for modifications.
+
+Paths are revalidated at admission. Do not add or remove targets during execution. Declarations are a cooperation contract, not an operating-system sandbox.
+
+## Interruption and stop evidence
+
+Heartbeat expiry does not automatically release targets. Interrupted tasks retain `reservation_active`; unknown side effects are marked by `outcome_unknown`. Confirm stopping and inspect side effects before handing work over. If native checks cannot establish termination, require explicit operator confirmation. Missing PIDs or unavailable process inspection do not prove stopping.
+
+Stop evidence must cover the current agent and child workers it started, stating how cessation of modifying work was checked, the result, and any reason for manual clearing. Resume evidence additionally explains whether external actions took effect and where work can safely continue. Successful finish is not acceptance; structural evidence validation does not replace a controller's checks.
+
+## File-only channel
+
+Read the overview, then `tasks/<task_id>.json` before updating. Write complete JSON to `inbox/<request_id>.json`, matching the filename to the request ID. If renaming is available, write a temporary file first and rename it to `.json`. Read `receipts/<request_id>.json`; only `ok=true` means success. If no receipt exists, inspect the original task and consumer instead of dispatching the same action again. After a failure receipt, reread current state and submit corrected content with a new ID.
+
+Execution-capable agents use `request --file <json>` directly without a background service. File-only requests need a `tick` or `watch` consumer. Doctor checks identity and capabilities; it does not replace actual receipt verification.
+
+## Platforms and permissions
+
+The first release supports cooperation on one host under one user. macOS has been tested; Linux and Windows have not been validated on real machines. Implementation branches and mapping fixtures are not machine-level acceptance. Preserve platform access differences: the skill does not provision credentials, elevate permissions, or replay external side effects automatically. Older formats need explicit migration, not silently created replacement state IDs.

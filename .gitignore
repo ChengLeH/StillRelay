@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.venv/
+config.json
+.bootstrap.lock
+.bootstrap.pending.json
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+data/
+exchange/
+requests/
+reports/
+work/
