@@ -118,6 +118,19 @@ def check_metadata(value):
     return value
 
 
+def scanner_environment():
+    env = {'PATH': os.defpath, 'HOME': '/var/empty',
+           'BETTERLEAKS_VALIDATE': 'false', 'BETTERLEAKS_ANALYZE': 'false'}
+    # Windows needs SystemRoot to load side-by-side runtime assemblies.
+    # Preserve that OS path only, never the caller's whole environment.
+    if os.name == 'nt':
+        root = os.environ.get('SystemRoot')
+        if not root:
+            raise PrivacyError('Windows system environment is unavailable.')
+        env['SystemRoot'] = root
+    return env
+
+
 def guard(value, scanner=None):
     """Sanitize, then optionally run an offline scanner over JSON on stdin.
 
@@ -138,8 +151,7 @@ def guard(value, scanner=None):
         result = subprocess.run(list(scanner), input=payload, text=True, encoding='utf-8',
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                 timeout=30, check=False,
-                                env={'PATH': os.defpath, 'HOME': '/var/empty',
-                                     'BETTERLEAKS_VALIDATE': 'false', 'BETTERLEAKS_ANALYZE': 'false'})
+                                env=scanner_environment())
     except (OSError, subprocess.SubprocessError, ValueError, TypeError):
         raise PrivacyError('Privacy scanner could not validate the content.') from None
     if result.returncode == 1:

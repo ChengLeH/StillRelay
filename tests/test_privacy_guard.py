@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scripts"))
 
-from privacy_guard import PrivacyError, check_metadata, guard, scrub
+from privacy_guard import PrivacyError, check_metadata, guard, scrub, scanner_environment
 
 
 class PrivacyTests(unittest.TestCase):
@@ -64,6 +64,16 @@ class PrivacyTests(unittest.TestCase):
         code = 'import os,sys; sys.exit(1 if "PRIVACY_TEST_CREDENTIAL" in os.environ or os.environ.get("BETTERLEAKS_VALIDATE")!="false" else 0)'
         with patch.dict(os.environ, {'PRIVACY_TEST_CREDENTIAL': 'synthetic-secret'}):
             self.assertEqual(guard('safe', [sys.executable, '-c', code]), 'safe')
+
+    def test_windows_environment_preserves_only_system_root(self):
+        from unittest.mock import patch
+        with patch('privacy_guard.os.name', 'nt'), patch('privacy_guard.os.environ', {'SystemRoot':'system-directory','PRIVACY_TEST_CREDENTIAL':'excluded'}):
+            env=scanner_environment()
+            self.assertEqual(env['SystemRoot'],'system-directory')
+            self.assertNotIn('PRIVACY_TEST_CREDENTIAL',env)
+            self.assertEqual(set(env),{'SystemRoot','PATH','HOME','BETTERLEAKS_VALIDATE','BETTERLEAKS_ANALYZE'})
+        with patch('privacy_guard.os.name','nt'), patch('privacy_guard.os.environ',{}):
+            with self.assertRaises(PrivacyError):scanner_environment()
 
     def test_safe_metadata_and_placeholders(self):
         safe = {'task_id': '019c6e27-e55b-73d1-87d8-4e01f1f75043',
