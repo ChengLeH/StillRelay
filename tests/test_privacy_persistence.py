@@ -31,6 +31,19 @@ class PrivacyPersistence(unittest.TestCase):
    config['privacy_scanner']=[sys.executable,'-c','raise SystemExit(2)'];store=m.Store(config)
    with self.assertRaises(m.StateError):store.apply(dict(r,request_id=str(uuid.uuid4())))
    store.db.close()
+ def test_direct_event_metadata_uses_scanner(self):
+  path=Path(__file__).resolve().parents[1]/'scripts/state.py'
+  spec=importlib.util.spec_from_file_location('direct_event_test',path);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+  with tempfile.TemporaryDirectory() as temp:
+   cp=Path(temp)/'config.json';m.bootstrap(cp);cfg=json.loads(cp.read_text());store=m.Store(cfg)
+   try:
+    r={'schema_version':1,'request_id':str(uuid.uuid4()),'actor':'worker','op':'create','execution_pool':'cloud','read_only':True,'resources':[],'fields':{'title':'safe','goal':'safe'}}
+    task=store.apply(r)['task'];revision=task['revision']
+    store.config['privacy_scanner']=[sys.executable,'-c',"import sys,json;v=json.load(sys.stdin);raise SystemExit(1 if v.get('actor')=='opaque-event-fixture' else 0)"]
+    with self.assertRaises(m.StateError):
+     with store.transaction():store.save(task,'opaque-event-fixture','test')
+    self.assertEqual(store.get(task['task_id'])['revision'],revision)
+   finally:store.db.close()
  def test_public(self):self.run_version(Path(__file__).resolve().parents[1]/'scripts/state.py')
 
 if __name__=='__main__':unittest.main()

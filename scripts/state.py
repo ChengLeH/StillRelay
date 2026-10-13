@@ -281,6 +281,8 @@ class Store:
 
     def save(self, task, actor, action):
         metadata(actor)
+        metadata(action)
+        self.protect({"actor": actor, "action": action})
         for key in ("task_id", "worker", "lease_id", "retired_lease_id", "origin", "resources", "created_by"):
             if key in task: metadata(task[key])
         safe = self.protect(task)
