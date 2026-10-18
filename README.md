@@ -6,6 +6,20 @@ A portable skill for cooperating agents to share task identity, verified progres
 
 Install the **entire `shared-task-state` folder** in a skill directory supported by your platform. Copying only `SKILL.md` omits the helper. Commands below are relative to that folder; agents should use the helper's full installed path when working elsewhere.
 
+## Connect through MCP
+
+For MCP-capable clients such as Antigravity or Hermes, install the optional local server from this repository using [uv](https://docs.astral.sh/uv/guides/tools/):
+
+```sh
+uv tool install 'git+https://github.com/ChengLeH/shared-task-state@main'
+shared-task-state-mcp init
+shared-task-state-mcp client-config --client antigravity
+```
+
+Run `init` once for a **new** installation. If you already have task state, select its configuration with `--config /absolute/path/config.json` before the subcommand; do not create a second state. Merge the generated server entry into your client's existing settings, then reload MCP. Use `--client hermes` for Hermes. The generated binding includes the existing state UUID and the installed runtime's absolute path; no hand-written Python paths are needed.
+
+The server uses stdio, exposes five structured tools, and opens no network port. Every client accesses the same configured database. `--read-only` removes the mutation tool entirely. This MCP installation adds the official Python MCP SDK; the standalone skill/CLI below remains standard-library-only. See the [MCP installation guide, client examples, and copyable agent prompt](references/mcp.md).
+
 ## Start with the primary agent
 
 1. Verify that participants can access the same configuration, database, and exchange directory. Check each agent's actual read, write, and execution permissions.
