@@ -12,3 +12,6 @@ exchange/
 requests/
 reports/
 work/
+build/
+dist/
+*.egg-info/

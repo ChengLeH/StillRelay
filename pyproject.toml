@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shared-task-state-mcp"
+dynamic = ["version"]
+description = "Local MCP tools for durable task state shared by cooperating agents"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{name = "ChengLeH"}]
+dependencies = ["mcp>=2.3.0,<3"]
+
+[project.urls]
+Repository = "https://github.com/ChengLeH/shared-task-state"
+Documentation = "https://github.com/ChengLeH/shared-task-state/blob/main/references/mcp.md"
+
+[project.scripts]
+shared-task-state = "shared_task_state.state:main"
+shared-task-state-mcp = "shared_task_state_mcp.__main__:main"
+
+[tool.setuptools]
+packages = ["shared_task_state", "shared_task_state_mcp"]
+package-dir = {shared_task_state = "scripts"}
+
+[tool.setuptools.dynamic]
+version = {attr = "shared_task_state_mcp.__version__"}

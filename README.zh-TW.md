@@ -4,6 +4,20 @@
 
 這個技能讓同一台電腦上的多個代理共用任務身分、最後確認步驟與資源占用。代理可以直接維護本機狀態，不需要接單程式、Slack、MCP（模型上下文協定）或平台掛鉤。Python 3.10 以上即可使用，只依賴標準函式庫。把整個 `shared-task-state` 資料夾安裝到平台實際支援的技能目錄；只複製 `SKILL.md` 不會帶入讀寫工具。以下相對路徑以技能資料夾為基準，代理應使用它實際安裝位置的完整腳本路徑。
 
+## 透過 MCP（模型上下文協定）接入
+
+Anti-Gravity（反重力）或 Hermes（赫密斯代理）等支援 MCP 的用戶端，可用 [uv 套件工具](https://docs.astral.sh/uv/guides/tools/) 從本專案安裝可選的本機伺服器：
+
+```sh
+uv tool install 'git+https://github.com/ChengLeH/shared-task-state@main'
+shared-task-state-mcp init
+shared-task-state-mcp client-config --client antigravity
+```
+
+只有**全新安裝**才執行一次 `init`。已經有任務狀態時，先以 `--config /absolute/path/config.json`（放在子命令前）選擇既有設定，不另建資料庫。把產生的伺服器項目合併到用戶端設定，再重新載入 MCP；Hermes 改用 `--client hermes`。產生的設定含既有狀態 UUID（通用唯一識別碼）與已安裝執行環境的完整路徑，不必手填 Python 位置。
+
+入口使用 stdio（標準輸入／輸出），提供五個結構化工具，不開網路埠；各用戶端共用指定的資料庫。加入 `--read-only` 可完全移除更新工具。安裝 MCP 版本會增加官方 Python MCP SDK（開發套件）依賴，下方獨立技能／命令列用法仍只需要標準函式庫。完整步驟、設定範例與可直接交給代理的提示詞見 [MCP 安裝說明](references/mcp.zh-TW.md)。
+
 ## 主代理先做的事
 
 1. 確認所有參與者能存取同一份設定、資料庫與交換目錄，以及各自實際具有哪些讀寫或執行權限。
