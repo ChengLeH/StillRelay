@@ -50,6 +50,9 @@ class Backend:
                 'total_tasks': store.db.execute('SELECT COUNT(*) FROM tasks').fetchone()[0],
                 'latest_event': store.db.execute('SELECT COALESCE(MAX(seq),0) FROM events').fetchone()[0],
                 'privacy_scanner_configured': bool(store.config.get('privacy_scanner')),
+                'evidence_contract_version': 1,
+                'fact_writes_require_sources': True,
+                'artifact_checks_enabled': bool(store.config.get('artifact_roots')),
                 'initialization_allowed': False,
                 'liveness': 'Recorded state only; silence is not proof of termination.'})
 
@@ -82,7 +85,7 @@ class Backend:
             rows = store.db.execute('SELECT seq,at,actor,action,snapshot FROM events '
                 'WHERE task_id=? AND seq>? ORDER BY seq LIMIT ?', (task_id, after_seq, limit + 1)).fetchall()
             events = [{'seq': row[0], 'at': row[1], 'actor': row[2], 'action': row[3],
-                       'task': json.loads(row[4])} for row in rows[:limit]]
+                       'task': state.evidence.task_view(json.loads(row[4]))} for row in rows[:limit]]
             return self.protect(store, {'ok': True, 'state_id': self.state_id, 'events': events,
                 'has_more': len(rows) > limit, 'next_after_seq': events[-1]['seq'] if events else after_seq})
 

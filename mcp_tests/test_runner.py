@@ -73,6 +73,8 @@ class RunnerTests(unittest.TestCase):
         actions = [event["action"] for event in self.events()]
         self.assertEqual(result["status"], "worker_done")
         self.assertEqual(result["exit_code"], 0)
+        self.assertEqual(result['exit_code_source'], 'subprocess_wait')
+        self.assertIn('reported_by_worker', task['exit_code_trust'])
         self.assertFalse(result["reservation_active"])
         self.assertEqual(task["status"], "worker_done")
         self.assertFalse(task["reservation_active"])

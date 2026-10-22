@@ -39,7 +39,10 @@ class DelegationPrivacyTests(unittest.TestCase):
                                               'report_ref': '/local/' + secret})
             self.assertEqual(backend.read(task['task_id'])['task']['revision'], revision)
             task = apply('bind', task, execution={'executor': 'command', 'run_id': 'fixture-run'})
-            task = apply('update', task, fields={'summary': secret, 'verified_facts': [pem],
+            seq = backend.history(task['task_id'])['events'][-1]['seq']
+            fact = {'id': 'privacy-fixture', 'statement': pem, 'method': 'Read synthetic fixture',
+                    'sources': [{'kind': 'event', 'seq': seq}]}
+            task = apply('update', task, fields={'summary': secret, 'verified_facts': [fact],
                                                 'next_step': 'password=fixture-password'})
             view = backend.supervise([task['task_id']])
             task = apply('finish', task, exit_code=0, report=secret + '\n' + pem)

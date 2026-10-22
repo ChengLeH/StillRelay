@@ -26,7 +26,7 @@ Updates use the latest `expected_revision` to reject stale writes. Claim creates
 | `requeue` | Task ID, revision, `stop_confirmed=true`, nonempty `stop_evidence` and `resume_evidence`; check side effects before queueing again |
 | `accept` | A controller different from the worker; `checks.source`, `checks.diff`, `checks.tests`, and `checks.runtime` must each contain actual evidence text |
 
-Common progress fields `title`, `goal`, `phase`, `summary`, `last_confirmed_step`, and `next_step` are strings. `constraints`, `verified_facts`, `failed_attempts`, `artifacts`, `backups`, and `blockers` are arrays of strings. Record evidence and backup paths rather than secret contents.
+Common progress fields `title`, `goal`, `phase`, `summary`, `last_confirmed_step`, and `next_step` are strings. `constraints`, `failed_attempts`, `artifacts`, `backups`, and `blockers` are arrays of strings. New `verified_facts` are source-backed objects with id/statement/method/sources. Facts, failed attempts, artifact references and backups accumulate across update/finish/plan; constraints and blockers remain replaceable. Use explicit retractions to withdraw accumulated entries. Record evidence locations rather than secret contents. See the [0.3 evidence contract and upgrade notes](evidence.md) for local artifact checks, legacy fact classification, limits and exit-code trust.
 
 ## Minimal claim and update examples
 

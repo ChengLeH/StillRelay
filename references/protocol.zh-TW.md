@@ -26,7 +26,7 @@ SQLite（交易式資料庫）保存權威任務與版本歷史。交換目錄�
 | `requeue` | 任務 ID、版本、`stop_confirmed=true`、非空 `stop_evidence` 及 `resume_evidence`；查證副作用後才重新排隊 |
 | `accept` | 不同於工作者的控制者；`checks` 的 `source`、`diff`、`tests`、`runtime` 四鍵均須實際證據文字 |
 
-常用進度欄位：`title`、`goal`、`phase`、`summary`、`last_confirmed_step`、`next_step` 為文字；`constraints`、`verified_facts`、`failed_attempts`、`artifacts`、`backups`、`blockers` 為文字陣列。證據與備份記錄路徑，不複製機密內容。
+常用進度欄位：`title`、`goal`、`phase`、`summary`、`last_confirmed_step`、`next_step` 為文字；`constraints`、`failed_attempts`、`artifacts`、`backups`、`blockers` 為文字陣列。新的 `verified_facts` 使用含 id／statement／method／sources 的來源物件。事實、失敗方法、產物參照與備份在 update／finish／plan 累積合併；限制與阻礙仍可整體更新。撤回累積項目需明確留下 retractions。證據記位置，不複製機密內容。檔案檢查、舊事實分類、容量限制與退出碼信任範圍見 [0.3 證據格式與升級說明](evidence.zh-TW.md)。
 
 ## 最小領取與更新範例
 
