@@ -1,0 +1,7 @@
+include README.md README.zh-TW.md SKILL.md SKILL.zh-TW.md
+recursive-include references *.md
+recursive-include skills *.md
+recursive-include assets *.png *.md
+recursive-include mcp_tests *.py
+recursive-include benchmarks *.py *.md *.json *.jsonl *.txt
+recursive-include docs/releases *.md
