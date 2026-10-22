@@ -108,3 +108,7 @@ shared-task-state-mcp client-config --client hermes
 ## 移除與回復
 
 停用或移除用戶端的這個伺服器項目，重新載入後，可用 `uv tool uninstall shared-task-state-mcp` 移除套件。任務設定、資料庫與交換目錄會保留。要回復程式版本，重新安裝相容於狀態格式的先前 Git 提交即可。初始化與產生設定不會改用戶端檔案，也沒有另外安裝的背景服務；stdio 程序由用戶端管理。
+
+## StillRelay 靜默委派
+
+StillRelay 是 Shared Task State 的展示名稱，既有命令、套件與連線名稱保留。新增 `shared_task_supervise`，可在單一唯讀快照中查詢指定任務的聯絡與回報進展；`shared_task_apply` 新增可選的執行關聯。用法見[委派指南](delegation.zh-TW.md)。連上 MCP 不會自動啟動工作者或定時喚醒 agent。

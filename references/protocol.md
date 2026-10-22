@@ -73,3 +73,9 @@ Execution-capable agents use `request --file <json>` directly without a backgrou
 ## Platforms and permissions
 
 The first release supports cooperation on one host under one user. Hosted CI covers macOS, Linux and Windows; real agent and permission integrations still need separate acceptance. Preserve platform access differences: the skill does not provision credentials, elevate permissions, or replay external side effects automatically. Older formats need explicit migration, not silently created replacement state IDs.
+
+## Optional run binding (StillRelay 0.2)
+
+A current worker may send `op=bind` with `task_id`, `expected_revision`, `actor`, `lease_id` and `execution={executor,run_id,status_ref?,report_ref?}`. The task's optional `delegation` includes its original creator as controller and the current worker/generation. Binding does not launch work. One lease binds one exact run; a different binding under that lease is rejected. A new claim clears the active binding; prior snapshots retain it. References are inert evidence locations, not commands or permission to read them. Existing tasks require no rewrite.
+
+The readonly `shared_task_supervise` view is advisory: heartbeat freshness is recorded contact, progress is a worker report, and correctness still requires independent evidence. Task batches are bounded for output size, independent of participant count. See [silent delegation](delegation.md).

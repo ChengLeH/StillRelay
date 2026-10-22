@@ -36,3 +36,7 @@ description: Maintain one shared task record, reserve declared resources, and re
 交接沿用同一任務 ID，說明最後確認步驟、已確認停止或仍占用的狀態、未知副作用、下一步與證據。舊租約不能更新或釋放新工作者的占用。
 
 格式見 [資料契約](references/protocol.zh-TW.md)。本技能只適用於同一主機、同一使用者信任範圍內合作；`actor` 不是帳號認證，資源宣告不是強制沙箱，各平台權限維持原樣。
+
+## 靜默委派
+
+背景工作與間隔查證可搭配[選用的靜默委派 Skill](skills/silent-delegation/SKILL.md)與[接入指南](references/delegation.zh-TW.md)。詳細日誌留在執行端，監督仍依共同進度與必要證據持續進行。Agent 人數與執行池容量分開設定。

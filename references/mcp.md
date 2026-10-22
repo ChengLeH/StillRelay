@@ -89,6 +89,7 @@ This uses the shared platform-default config or `SHARED_TASK_STATE_CONFIG`. Appe
 | `shared_task_overview` | Task summaries, paged by `after_task_id`, `limit` 1–100 |
 | `shared_task_read` | Exact task ID, latest revision and lease |
 | `shared_task_history` | Events paged by `after_seq`, `limit` 1–100 |
+| `shared_task_supervise` | Read a compact, consistent snapshot of selected tasks and distinguish heartbeat contact from reported progress |
 | `shared_task_apply` | Existing create/plan/claim/update/heartbeat/finish/release/requeue/accept protocol |
 
 The reads use read-only transactions and never reconcile expired heartbeats. They cannot prove a worker has stopped. Read results are bounded to 2 MiB; reduce the page size for large history. Writes use the same [`request` protocol](protocol.md), optimistic revisions, leases, resource reservations, independent acceptance and privacy checks as the CLI. MCP does not accept process-ID binding.
@@ -108,3 +109,7 @@ This is an instruction for an agent that can edit local settings, not a claim of
 ## Remove or recover
 
 Disable or remove this server's client entry, reload the client, then run `uv tool uninstall shared-task-state-mcp` if desired. Your task config, database and exchange remain. Reinstall a previous pinned Git revision to roll back package code; use a version compatible with your state schema. Initialization and config generation do not edit client settings, and no background service needs stopping beyond the client-owned stdio process.
+
+## StillRelay silent delegation
+
+StillRelay is the display name of Shared Task State. Existing commands, package and server bindings remain unchanged. The optional run binding and readonly supervision tool are described in the [delegation guide](delegation.md). Connecting MCP alone does not start workers or install a timer.
