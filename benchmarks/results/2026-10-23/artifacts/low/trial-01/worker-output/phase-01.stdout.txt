@@ -1,0 +1,5 @@
+phase=01 line=0001 status=ok payload=deterministic
+phase=01 line=0002 status=ok payload=deterministic
+phase=01 line=0003 status=ok payload=deterministic
+phase=01 line=0004 status=ok payload=deterministic
+phase=01 line=0005 status=ok payload=deterministic

@@ -21,6 +21,17 @@ def main():
     init.add_argument('--local-capacity', type=int)
     client = sub.add_parser('client-config', help='Print configuration; does not edit any client settings')
     client.add_argument('--client', choices=['mcp', 'antigravity', 'hermes'], default='mcp')
+    supervise = sub.add_parser('supervise', help='Read a compact supervision snapshot')
+    supervise.add_argument('--task-id', action='append', required=True)
+    supervise.add_argument('--after-seq', type=int, default=0)
+    runner = sub.add_parser('run', help='Run an explicit command quietly under a task lease')
+    runner.add_argument('--task-id', required=True)
+    runner.add_argument('--actor', required=True)
+    runner.add_argument('--executor', default='command')
+    runner.add_argument('--cwd')
+    runner.add_argument('--heartbeat-seconds', type=float)
+    runner.add_argument('--run-id')
+    runner.add_argument('argv', nargs=argparse.REMAINDER)
     args = parser.parse_args()
     try:
         config = Path(args.config).expanduser().resolve() if args.config else state.default_config()
@@ -39,6 +50,21 @@ def main():
                       '\n    args: ' + json.dumps(entry['args']))
             else:
                 print(json.dumps({'mcpServers': {'shared-task-state': entry}}, ensure_ascii=False, indent=2))
+        elif args.command == 'run':
+            if args.read_only:
+                raise state.StateError('read-only mode cannot launch a worker')
+            state.join(config, args.state_id)
+            from .runner import run, exit_status
+            command = args.argv[1:] if args.argv[:1] == ['--'] else args.argv
+            result = run(config, args.task_id, args.actor, command, args.cwd,
+                         args.executor, args.heartbeat_seconds, args.run_id,
+                         expected_state_id=args.state_id)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return exit_status(result)
+        elif args.command == 'supervise':
+            from .backend import Backend
+            print(json.dumps(Backend(config, args.state_id).supervise(args.task_id, args.after_seq),
+                             ensure_ascii=False, indent=2))
         else:
             from .server import build_server
             build_server(config, args.state_id, args.read_only).run(transport='stdio')

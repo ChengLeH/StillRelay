@@ -1,0 +1,697 @@
+{
+  "schema_version": 2,
+  "measurement_scope": "observed supervisory-channel input: exact shared_task_supervise MCP payloads plus baseline-only local executor_log_read payloads; no model inference or provider calls",
+  "not_measured": [
+    "total agent tokens",
+    "model context accounting",
+    "provider usage",
+    "billing"
+  ],
+  "tokenizer": {
+    "library": "tiktoken",
+    "library_version": "0.14.0",
+    "encoding": "o200k_base",
+    "basis": "sum of token counts for each exact serialized tool call and result payload separately"
+  },
+  "runtime_root": "installed package",
+  "workload": {
+    "phases": 3,
+    "lines_per_phase": {
+      "low": 5,
+      "medium": 50,
+      "high": 500
+    },
+    "trials_per_case": 3,
+    "mcp_participants": [
+      "ControllerA",
+      "WorkerB"
+    ],
+    "supervisor_modes": {
+      "verbose": "common actual ControllerA MCP exchanges plus one actual local executor-log read per phase",
+      "quiet": "the same actual ControllerA MCP exchanges; logs remain local and unread by supervisor"
+    },
+    "same_common_mcp_payloads": true
+  },
+  "aggregate_by_case": [
+    {
+      "case": "low",
+      "lines_per_phase": 5,
+      "trials": 3,
+      "mean_verbose_tokens": 3178.6666666666665,
+      "mean_quiet_tokens": 2821.6666666666665,
+      "mean_tokens_saved": 357.0,
+      "numerator_tokens": 1071,
+      "denominator_tokens": 9536,
+      "percent_of_verbose_tokens": 11.231124161073826,
+      "mean_verbose_bytes": 9637.333333333334,
+      "mean_quiet_bytes": 8488.333333333334,
+      "mean_worker_mcp_tokens": 4147.333333333333,
+      "mean_worker_mcp_bytes": 12294.0
+    },
+    {
+      "case": "medium",
+      "lines_per_phase": 50,
+      "trials": 3,
+      "mean_verbose_tokens": 5359.0,
+      "mean_quiet_tokens": 2842.0,
+      "mean_tokens_saved": 2517.0,
+      "numerator_tokens": 7551,
+      "denominator_tokens": 16077,
+      "percent_of_verbose_tokens": 46.96771785780929,
+      "mean_verbose_bytes": 16616.666666666668,
+      "mean_quiet_bytes": 8573.666666666666,
+      "mean_worker_mcp_tokens": 4165.0,
+      "mean_worker_mcp_bytes": 12431.0
+    },
+    {
+      "case": "high",
+      "lines_per_phase": 500,
+      "trials": 3,
+      "mean_verbose_tokens": 26938.0,
+      "mean_quiet_tokens": 2824.0,
+      "mean_tokens_saved": 24114.0,
+      "numerator_tokens": 72342,
+      "denominator_tokens": 80814,
+      "percent_of_verbose_tokens": 89.51666790407603,
+      "mean_verbose_bytes": 85425.33333333333,
+      "mean_quiet_bytes": 8538.333333333334,
+      "mean_worker_mcp_tokens": 4151.0,
+      "mean_worker_mcp_bytes": 12369.666666666666
+    }
+  ],
+  "trials": [
+    {
+      "case": "low",
+      "trial": 1,
+      "lines_per_phase": 5,
+      "phase_count": 3,
+      "task_id": "token-bench-low-01",
+      "state_id": "9b1a50be-927c-4d30-ac82-c0954b5135c4",
+      "correctness": {
+        "accepted_task_status": "accepted",
+        "phase_exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "observed_output_lines": 15,
+        "expected_output_lines": 15,
+        "phase_sha256": [
+          "899e9ef93efa727de41dfc2be8a36208e881ac165a88d7467908a167f620c316",
+          "fa614e91355593202494b85a2ac917c21f809dba5586fdadff1da94895c5234a",
+          "e06d6c3feb8bc143e18c95c7a3bf34743026778a9a124a563dc0b535e23dba85"
+        ]
+      },
+      "worker_command_stdout_bytes_utf8": 765,
+      "supervisor_visible_payloads": {
+        "verbose": {
+          "tool_calls": 9,
+          "tool_results": 9,
+          "mcp_payload_tokens": 2835,
+          "local_executor_payload_tokens": 357,
+          "total_payload_tokens": 3192,
+          "total_payload_bytes_utf8": 9637
+        },
+        "quiet": {
+          "tool_calls": 6,
+          "tool_results": 6,
+          "mcp_payload_tokens": 2835,
+          "local_executor_payload_tokens": 0,
+          "total_payload_tokens": 2835,
+          "total_payload_bytes_utf8": 8488
+        },
+        "savings": {
+          "numerator_tokens": 357,
+          "denominator_tokens": 3192,
+          "percent": 11.18421052631579,
+          "payload_bytes_removed": 1149
+        }
+      },
+      "actual_mcp_wire": {
+        "ControllerA": {
+          "mcp_calls": 6,
+          "mcp_results": 6,
+          "payload_tokens_o200k_base": 2835,
+          "payload_bytes_utf8": 8488
+        },
+        "WorkerB": {
+          "mcp_calls": 7,
+          "mcp_results": 7,
+          "payload_tokens_o200k_base": 4167,
+          "payload_bytes_utf8": 12291
+        }
+      },
+      "artifacts": {
+        "verbose": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/low/trial-01/supervisor-verbose.jsonl",
+        "quiet": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/low/trial-01/supervisor-quiet.jsonl",
+        "mcp_wire": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/low/trial-01/mcp-wire.jsonl",
+        "worker_output": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/low/trial-01/worker-output"
+      }
+    },
+    {
+      "case": "low",
+      "trial": 2,
+      "lines_per_phase": 5,
+      "phase_count": 3,
+      "task_id": "token-bench-low-02",
+      "state_id": "eb794312-cf5a-4944-b58e-f594ba415699",
+      "correctness": {
+        "accepted_task_status": "accepted",
+        "phase_exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "observed_output_lines": 15,
+        "expected_output_lines": 15,
+        "phase_sha256": [
+          "899e9ef93efa727de41dfc2be8a36208e881ac165a88d7467908a167f620c316",
+          "fa614e91355593202494b85a2ac917c21f809dba5586fdadff1da94895c5234a",
+          "e06d6c3feb8bc143e18c95c7a3bf34743026778a9a124a563dc0b535e23dba85"
+        ]
+      },
+      "worker_command_stdout_bytes_utf8": 765,
+      "supervisor_visible_payloads": {
+        "verbose": {
+          "tool_calls": 9,
+          "tool_results": 9,
+          "mcp_payload_tokens": 2814,
+          "local_executor_payload_tokens": 357,
+          "total_payload_tokens": 3171,
+          "total_payload_bytes_utf8": 9638
+        },
+        "quiet": {
+          "tool_calls": 6,
+          "tool_results": 6,
+          "mcp_payload_tokens": 2814,
+          "local_executor_payload_tokens": 0,
+          "total_payload_tokens": 2814,
+          "total_payload_bytes_utf8": 8489
+        },
+        "savings": {
+          "numerator_tokens": 357,
+          "denominator_tokens": 3171,
+          "percent": 11.258278145695364,
+          "payload_bytes_removed": 1149
+        }
+      },
+      "actual_mcp_wire": {
+        "ControllerA": {
+          "mcp_calls": 6,
+          "mcp_results": 6,
+          "payload_tokens_o200k_base": 2814,
+          "payload_bytes_utf8": 8489
+        },
+        "WorkerB": {
+          "mcp_calls": 7,
+          "mcp_results": 7,
+          "payload_tokens_o200k_base": 4143,
+          "payload_bytes_utf8": 12296
+        }
+      },
+      "artifacts": {
+        "verbose": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/low/trial-02/supervisor-verbose.jsonl",
+        "quiet": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/low/trial-02/supervisor-quiet.jsonl",
+        "mcp_wire": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/low/trial-02/mcp-wire.jsonl",
+        "worker_output": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/low/trial-02/worker-output"
+      }
+    },
+    {
+      "case": "low",
+      "trial": 3,
+      "lines_per_phase": 5,
+      "phase_count": 3,
+      "task_id": "token-bench-low-03",
+      "state_id": "4405b3ff-c1cb-4224-9002-422277236512",
+      "correctness": {
+        "accepted_task_status": "accepted",
+        "phase_exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "observed_output_lines": 15,
+        "expected_output_lines": 15,
+        "phase_sha256": [
+          "899e9ef93efa727de41dfc2be8a36208e881ac165a88d7467908a167f620c316",
+          "fa614e91355593202494b85a2ac917c21f809dba5586fdadff1da94895c5234a",
+          "e06d6c3feb8bc143e18c95c7a3bf34743026778a9a124a563dc0b535e23dba85"
+        ]
+      },
+      "worker_command_stdout_bytes_utf8": 765,
+      "supervisor_visible_payloads": {
+        "verbose": {
+          "tool_calls": 9,
+          "tool_results": 9,
+          "mcp_payload_tokens": 2816,
+          "local_executor_payload_tokens": 357,
+          "total_payload_tokens": 3173,
+          "total_payload_bytes_utf8": 9637
+        },
+        "quiet": {
+          "tool_calls": 6,
+          "tool_results": 6,
+          "mcp_payload_tokens": 2816,
+          "local_executor_payload_tokens": 0,
+          "total_payload_tokens": 2816,
+          "total_payload_bytes_utf8": 8488
+        },
+        "savings": {
+          "numerator_tokens": 357,
+          "denominator_tokens": 3173,
+          "percent": 11.251181846832651,
+          "payload_bytes_removed": 1149
+        }
+      },
+      "actual_mcp_wire": {
+        "ControllerA": {
+          "mcp_calls": 6,
+          "mcp_results": 6,
+          "payload_tokens_o200k_base": 2816,
+          "payload_bytes_utf8": 8488
+        },
+        "WorkerB": {
+          "mcp_calls": 7,
+          "mcp_results": 7,
+          "payload_tokens_o200k_base": 4132,
+          "payload_bytes_utf8": 12295
+        }
+      },
+      "artifacts": {
+        "verbose": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/low/trial-03/supervisor-verbose.jsonl",
+        "quiet": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/low/trial-03/supervisor-quiet.jsonl",
+        "mcp_wire": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/low/trial-03/mcp-wire.jsonl",
+        "worker_output": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/low/trial-03/worker-output"
+      }
+    },
+    {
+      "case": "medium",
+      "trial": 1,
+      "lines_per_phase": 50,
+      "phase_count": 3,
+      "task_id": "token-bench-medium-01",
+      "state_id": "6118bd07-bf84-4b32-bfbd-267eba2f4db9",
+      "correctness": {
+        "accepted_task_status": "accepted",
+        "phase_exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "observed_output_lines": 150,
+        "expected_output_lines": 150,
+        "phase_sha256": [
+          "9e2ec1200d410516ddcf8163d9dd0e2210a577a96d080edde733810c65b5819d",
+          "000651197fc7c10daeaf8efb9c7e67ec30125f23c51589120af69ca51a8a0f29",
+          "80dd4e34a0e1bb4b3538a0db50c425cf6a56302a44e4edd9ad990bdb6ee918ef"
+        ]
+      },
+      "worker_command_stdout_bytes_utf8": 7650,
+      "supervisor_visible_payloads": {
+        "verbose": {
+          "tool_calls": 9,
+          "tool_results": 9,
+          "mcp_payload_tokens": 2842,
+          "local_executor_payload_tokens": 2517,
+          "total_payload_tokens": 5359,
+          "total_payload_bytes_utf8": 16617
+        },
+        "quiet": {
+          "tool_calls": 6,
+          "tool_results": 6,
+          "mcp_payload_tokens": 2842,
+          "local_executor_payload_tokens": 0,
+          "total_payload_tokens": 2842,
+          "total_payload_bytes_utf8": 8574
+        },
+        "savings": {
+          "numerator_tokens": 2517,
+          "denominator_tokens": 5359,
+          "percent": 46.96771785780929,
+          "payload_bytes_removed": 8043
+        }
+      },
+      "actual_mcp_wire": {
+        "ControllerA": {
+          "mcp_calls": 6,
+          "mcp_results": 6,
+          "payload_tokens_o200k_base": 2842,
+          "payload_bytes_utf8": 8574
+        },
+        "WorkerB": {
+          "mcp_calls": 7,
+          "mcp_results": 7,
+          "payload_tokens_o200k_base": 4146,
+          "payload_bytes_utf8": 12430
+        }
+      },
+      "artifacts": {
+        "verbose": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/medium/trial-01/supervisor-verbose.jsonl",
+        "quiet": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/medium/trial-01/supervisor-quiet.jsonl",
+        "mcp_wire": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/medium/trial-01/mcp-wire.jsonl",
+        "worker_output": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/medium/trial-01/worker-output"
+      }
+    },
+    {
+      "case": "medium",
+      "trial": 2,
+      "lines_per_phase": 50,
+      "phase_count": 3,
+      "task_id": "token-bench-medium-02",
+      "state_id": "9df90ed4-a8ae-4942-9480-602d74135ddb",
+      "correctness": {
+        "accepted_task_status": "accepted",
+        "phase_exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "observed_output_lines": 150,
+        "expected_output_lines": 150,
+        "phase_sha256": [
+          "9e2ec1200d410516ddcf8163d9dd0e2210a577a96d080edde733810c65b5819d",
+          "000651197fc7c10daeaf8efb9c7e67ec30125f23c51589120af69ca51a8a0f29",
+          "80dd4e34a0e1bb4b3538a0db50c425cf6a56302a44e4edd9ad990bdb6ee918ef"
+        ]
+      },
+      "worker_command_stdout_bytes_utf8": 7650,
+      "supervisor_visible_payloads": {
+        "verbose": {
+          "tool_calls": 9,
+          "tool_results": 9,
+          "mcp_payload_tokens": 2835,
+          "local_executor_payload_tokens": 2517,
+          "total_payload_tokens": 5352,
+          "total_payload_bytes_utf8": 16616
+        },
+        "quiet": {
+          "tool_calls": 6,
+          "tool_results": 6,
+          "mcp_payload_tokens": 2835,
+          "local_executor_payload_tokens": 0,
+          "total_payload_tokens": 2835,
+          "total_payload_bytes_utf8": 8573
+        },
+        "savings": {
+          "numerator_tokens": 2517,
+          "denominator_tokens": 5352,
+          "percent": 47.02914798206278,
+          "payload_bytes_removed": 8043
+        }
+      },
+      "actual_mcp_wire": {
+        "ControllerA": {
+          "mcp_calls": 6,
+          "mcp_results": 6,
+          "payload_tokens_o200k_base": 2835,
+          "payload_bytes_utf8": 8573
+        },
+        "WorkerB": {
+          "mcp_calls": 7,
+          "mcp_results": 7,
+          "payload_tokens_o200k_base": 4167,
+          "payload_bytes_utf8": 12431
+        }
+      },
+      "artifacts": {
+        "verbose": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/medium/trial-02/supervisor-verbose.jsonl",
+        "quiet": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/medium/trial-02/supervisor-quiet.jsonl",
+        "mcp_wire": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/medium/trial-02/mcp-wire.jsonl",
+        "worker_output": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/medium/trial-02/worker-output"
+      }
+    },
+    {
+      "case": "medium",
+      "trial": 3,
+      "lines_per_phase": 50,
+      "phase_count": 3,
+      "task_id": "token-bench-medium-03",
+      "state_id": "b87391ac-0a17-47a3-966e-634f05b558a0",
+      "correctness": {
+        "accepted_task_status": "accepted",
+        "phase_exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "observed_output_lines": 150,
+        "expected_output_lines": 150,
+        "phase_sha256": [
+          "9e2ec1200d410516ddcf8163d9dd0e2210a577a96d080edde733810c65b5819d",
+          "000651197fc7c10daeaf8efb9c7e67ec30125f23c51589120af69ca51a8a0f29",
+          "80dd4e34a0e1bb4b3538a0db50c425cf6a56302a44e4edd9ad990bdb6ee918ef"
+        ]
+      },
+      "worker_command_stdout_bytes_utf8": 7650,
+      "supervisor_visible_payloads": {
+        "verbose": {
+          "tool_calls": 9,
+          "tool_results": 9,
+          "mcp_payload_tokens": 2849,
+          "local_executor_payload_tokens": 2517,
+          "total_payload_tokens": 5366,
+          "total_payload_bytes_utf8": 16617
+        },
+        "quiet": {
+          "tool_calls": 6,
+          "tool_results": 6,
+          "mcp_payload_tokens": 2849,
+          "local_executor_payload_tokens": 0,
+          "total_payload_tokens": 2849,
+          "total_payload_bytes_utf8": 8574
+        },
+        "savings": {
+          "numerator_tokens": 2517,
+          "denominator_tokens": 5366,
+          "percent": 46.906448005963476,
+          "payload_bytes_removed": 8043
+        }
+      },
+      "actual_mcp_wire": {
+        "ControllerA": {
+          "mcp_calls": 6,
+          "mcp_results": 6,
+          "payload_tokens_o200k_base": 2849,
+          "payload_bytes_utf8": 8574
+        },
+        "WorkerB": {
+          "mcp_calls": 7,
+          "mcp_results": 7,
+          "payload_tokens_o200k_base": 4182,
+          "payload_bytes_utf8": 12432
+        }
+      },
+      "artifacts": {
+        "verbose": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/medium/trial-03/supervisor-verbose.jsonl",
+        "quiet": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/medium/trial-03/supervisor-quiet.jsonl",
+        "mcp_wire": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/medium/trial-03/mcp-wire.jsonl",
+        "worker_output": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/medium/trial-03/worker-output"
+      }
+    },
+    {
+      "case": "high",
+      "trial": 1,
+      "lines_per_phase": 500,
+      "phase_count": 3,
+      "task_id": "token-bench-high-01",
+      "state_id": "a9fcc6f9-cfe7-405c-a692-193a1f21d448",
+      "correctness": {
+        "accepted_task_status": "accepted",
+        "phase_exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "observed_output_lines": 1500,
+        "expected_output_lines": 1500,
+        "phase_sha256": [
+          "78dfa08084fbb446aed0fec997490881cb0ee4bcccbf51a658f30a4b1a8fce80",
+          "0824ca456a4d67adee4a8de31610dce49cddd88b5a35128530266bb552339b62",
+          "eef7f5689fc1dcd130bb9c8875540b8b53d3eb9d93108342250fcf3e498590bb"
+        ]
+      },
+      "worker_command_stdout_bytes_utf8": 76500,
+      "supervisor_visible_payloads": {
+        "verbose": {
+          "tool_calls": 9,
+          "tool_results": 9,
+          "mcp_payload_tokens": 2824,
+          "local_executor_payload_tokens": 24114,
+          "total_payload_tokens": 26938,
+          "total_payload_bytes_utf8": 85426
+        },
+        "quiet": {
+          "tool_calls": 6,
+          "tool_results": 6,
+          "mcp_payload_tokens": 2824,
+          "local_executor_payload_tokens": 0,
+          "total_payload_tokens": 2824,
+          "total_payload_bytes_utf8": 8539
+        },
+        "savings": {
+          "numerator_tokens": 24114,
+          "denominator_tokens": 26938,
+          "percent": 89.51666790407603,
+          "payload_bytes_removed": 76887
+        }
+      },
+      "actual_mcp_wire": {
+        "ControllerA": {
+          "mcp_calls": 6,
+          "mcp_results": 6,
+          "payload_tokens_o200k_base": 2824,
+          "payload_bytes_utf8": 8539
+        },
+        "WorkerB": {
+          "mcp_calls": 7,
+          "mcp_results": 7,
+          "payload_tokens_o200k_base": 4144,
+          "payload_bytes_utf8": 12370
+        }
+      },
+      "artifacts": {
+        "verbose": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/high/trial-01/supervisor-verbose.jsonl",
+        "quiet": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/high/trial-01/supervisor-quiet.jsonl",
+        "mcp_wire": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/high/trial-01/mcp-wire.jsonl",
+        "worker_output": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/high/trial-01/worker-output"
+      }
+    },
+    {
+      "case": "high",
+      "trial": 2,
+      "lines_per_phase": 500,
+      "phase_count": 3,
+      "task_id": "token-bench-high-02",
+      "state_id": "b41c0acc-cae2-403a-9485-9805a641bfd4",
+      "correctness": {
+        "accepted_task_status": "accepted",
+        "phase_exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "observed_output_lines": 1500,
+        "expected_output_lines": 1500,
+        "phase_sha256": [
+          "78dfa08084fbb446aed0fec997490881cb0ee4bcccbf51a658f30a4b1a8fce80",
+          "0824ca456a4d67adee4a8de31610dce49cddd88b5a35128530266bb552339b62",
+          "eef7f5689fc1dcd130bb9c8875540b8b53d3eb9d93108342250fcf3e498590bb"
+        ]
+      },
+      "worker_command_stdout_bytes_utf8": 76500,
+      "supervisor_visible_payloads": {
+        "verbose": {
+          "tool_calls": 9,
+          "tool_results": 9,
+          "mcp_payload_tokens": 2818,
+          "local_executor_payload_tokens": 24114,
+          "total_payload_tokens": 26932,
+          "total_payload_bytes_utf8": 85425
+        },
+        "quiet": {
+          "tool_calls": 6,
+          "tool_results": 6,
+          "mcp_payload_tokens": 2818,
+          "local_executor_payload_tokens": 0,
+          "total_payload_tokens": 2818,
+          "total_payload_bytes_utf8": 8538
+        },
+        "savings": {
+          "numerator_tokens": 24114,
+          "denominator_tokens": 26932,
+          "percent": 89.53661072330313,
+          "payload_bytes_removed": 76887
+        }
+      },
+      "actual_mcp_wire": {
+        "ControllerA": {
+          "mcp_calls": 6,
+          "mcp_results": 6,
+          "payload_tokens_o200k_base": 2818,
+          "payload_bytes_utf8": 8538
+        },
+        "WorkerB": {
+          "mcp_calls": 7,
+          "mcp_results": 7,
+          "payload_tokens_o200k_base": 4131,
+          "payload_bytes_utf8": 12368
+        }
+      },
+      "artifacts": {
+        "verbose": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/high/trial-02/supervisor-verbose.jsonl",
+        "quiet": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/high/trial-02/supervisor-quiet.jsonl",
+        "mcp_wire": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/high/trial-02/mcp-wire.jsonl",
+        "worker_output": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/high/trial-02/worker-output"
+      }
+    },
+    {
+      "case": "high",
+      "trial": 3,
+      "lines_per_phase": 500,
+      "phase_count": 3,
+      "task_id": "token-bench-high-03",
+      "state_id": "970568c1-a6f2-4483-99e8-b4dce1aefd82",
+      "correctness": {
+        "accepted_task_status": "accepted",
+        "phase_exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "observed_output_lines": 1500,
+        "expected_output_lines": 1500,
+        "phase_sha256": [
+          "78dfa08084fbb446aed0fec997490881cb0ee4bcccbf51a658f30a4b1a8fce80",
+          "0824ca456a4d67adee4a8de31610dce49cddd88b5a35128530266bb552339b62",
+          "eef7f5689fc1dcd130bb9c8875540b8b53d3eb9d93108342250fcf3e498590bb"
+        ]
+      },
+      "worker_command_stdout_bytes_utf8": 76500,
+      "supervisor_visible_payloads": {
+        "verbose": {
+          "tool_calls": 9,
+          "tool_results": 9,
+          "mcp_payload_tokens": 2830,
+          "local_executor_payload_tokens": 24114,
+          "total_payload_tokens": 26944,
+          "total_payload_bytes_utf8": 85425
+        },
+        "quiet": {
+          "tool_calls": 6,
+          "tool_results": 6,
+          "mcp_payload_tokens": 2830,
+          "local_executor_payload_tokens": 0,
+          "total_payload_tokens": 2830,
+          "total_payload_bytes_utf8": 8538
+        },
+        "savings": {
+          "numerator_tokens": 24114,
+          "denominator_tokens": 26944,
+          "percent": 89.49673396674584,
+          "payload_bytes_removed": 76887
+        }
+      },
+      "actual_mcp_wire": {
+        "ControllerA": {
+          "mcp_calls": 6,
+          "mcp_results": 6,
+          "payload_tokens_o200k_base": 2830,
+          "payload_bytes_utf8": 8538
+        },
+        "WorkerB": {
+          "mcp_calls": 7,
+          "mcp_results": 7,
+          "payload_tokens_o200k_base": 4178,
+          "payload_bytes_utf8": 12371
+        }
+      },
+      "artifacts": {
+        "verbose": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/high/trial-03/supervisor-verbose.jsonl",
+        "quiet": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/high/trial-03/supervisor-quiet.jsonl",
+        "mcp_wire": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/high/trial-03/mcp-wire.jsonl",
+        "worker_output": "/private/tmp/stillrelay-measurement-20261023-final/artifacts/high/trial-03/worker-output"
+      }
+    }
+  ],
+  "output_directory": "/private/tmp/stillrelay-measurement-20261023-final"
+}

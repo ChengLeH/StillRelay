@@ -36,3 +36,7 @@ Release or requeue requires `stop_confirmed=true` and actual `stop_evidence`; re
 Reuse the same task ID in a handoff. State the last verified step, confirmed termination or continuing reservations, unknown side effects, the next action, and evidence locations. An old lease cannot update or release a new worker's reservations.
 
 See the [protocol](references/protocol.md). This skill supports cooperation on one host within one user's trust boundary. `actor` is not account authentication, resource declarations are not an enforced sandbox, and platform permissions remain unchanged.
+
+## Silent delegation
+
+For background work with periodic evidence-based supervision, use the optional [silent-delegation Skill](skills/silent-delegation/SKILL.md) and [integration guide](references/delegation.md). Quiet execution keeps verbose logs local; it does not cancel supervision. The number of agents is independent of configured execution-pool capacity.

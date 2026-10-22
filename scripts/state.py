@@ -24,6 +24,8 @@ ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 EDITABLE = {"title", "goal", "constraints", "phase", "summary", "last_confirmed_step",
             "verified_facts", "failed_attempts", "next_step", "artifacts", "backups", "blockers"}
 LIST_FIELDS = {"constraints", "verified_facts", "failed_attempts", "artifacts", "backups", "blockers"}
+PROGRESS_FIELDS = ("phase", "summary", "last_confirmed_step", "next_step", "blockers")
+EXECUTION_FIELDS = {"executor", "run_id", "status_ref", "report_ref"}
 
 
 
@@ -75,6 +77,97 @@ def checked_fields(fields):
     if len(json.dumps(fields, ensure_ascii=False).encode()) > 32768:
         raise StateError("task update exceeds 32 KiB")
     return scrub(fields)
+
+
+def checked_execution(execution):
+    if not isinstance(execution, dict) or not {"executor", "run_id"} <= set(execution) or set(execution) - EXECUTION_FIELDS:
+        raise StateError("execution requires executor and run_id, with optional status_ref and report_ref")
+    result = {"executor": safe_id(execution["executor"]), "run_id": safe_id(execution["run_id"])}
+    for key in ("status_ref", "report_ref"):
+        if key in execution:
+            value = execution[key]
+            if not isinstance(value, str):
+                raise StateError(key + " must be a bounded string")
+            metadata(value)
+            result[key] = value
+    return result
+
+
+def delegation_for(task, execution):
+    result = {"controller": safe_id(task["created_by"]), "worker": safe_id(task["worker"]),
+              "generation": task["generation"], **execution}
+    metadata(result)
+    if len(json.dumps(result, ensure_ascii=False).encode("utf-8")) > 4096:
+        raise StateError("delegation metadata exceeds 4 KiB")
+    return result
+
+
+def supervise(store, task_ids, after_seq=0):
+    """Read a compact supervision snapshot inside the caller's read transaction."""
+    if not isinstance(task_ids, list) or len(task_ids) > 100:
+        raise StateError("task_ids must be a list of at most 100 exact task IDs")
+    if any(not isinstance(task_id, str) for task_id in task_ids):
+        raise StateError("task_ids must contain exact task IDs")
+    checked_ids = [safe_id(task_id) for task_id in task_ids]
+    if len(set(checked_ids)) != len(checked_ids):
+        raise StateError("task_ids must be unique")
+    if not isinstance(after_seq, int) or isinstance(after_seq, bool) or after_seq < 0:
+        raise StateError("after_seq must be a nonnegative integer")
+
+    snapshot_seq = store.db.execute("SELECT COALESCE(MAX(seq),0) FROM events").fetchone()[0]
+    rows = []
+    if checked_ids:
+        placeholders = ",".join("?" for _ in checked_ids)
+        rows = store.db.execute("SELECT id,data FROM tasks WHERE id IN (" + placeholders + ")",
+                                checked_ids).fetchall()
+    by_id = {row[0]: json.loads(row[1]) for row in rows}
+    missing = [task_id for task_id in checked_ids if task_id not in by_id]
+    if missing:
+        raise StateError("task not found")
+
+    latest_progress = {}
+    if checked_ids:
+        placeholders = ",".join("?" for _ in checked_ids)
+        rows = store.db.execute(
+            "SELECT e.task_id,e.seq,e.at,e.actor,e.snapshot FROM events e "
+            "JOIN (SELECT task_id,MAX(seq) AS seq FROM events WHERE task_id IN (" + placeholders + ") "
+            "AND action='update' AND seq>? AND seq<=? GROUP BY task_id) latest "
+            "ON e.task_id=latest.task_id AND e.seq=latest.seq",
+            (*checked_ids, after_seq, snapshot_seq)).fetchall()
+        for task_id, seq, at, actor, snapshot in rows:
+            progress = json.loads(snapshot)
+            latest_progress[task_id] = {"seq": seq, "at": at, "actor": actor,
+                "generation": progress.get("generation"),
+                "progress": {key: progress.get(key) for key in PROGRESS_FIELDS}}
+
+    observed_at = time.time()
+    summaries = []
+    for task_id in checked_ids:
+        task = by_id[task_id]
+        heartbeat_epoch = task.get("heartbeat_epoch", 0)
+        heartbeat_age = max(0.0, observed_at - heartbeat_epoch) if heartbeat_epoch else None
+        recorded_binding = task.get("delegation")
+        binding_current = (isinstance(recorded_binding, dict) and
+                           recorded_binding.get("worker") == task.get("worker") and
+                           recorded_binding.get("generation") == task.get("generation"))
+        summaries.append({
+            "task_id": task_id,
+            "title": task.get("title"),
+            "status": task.get("status"),
+            "revision": task.get("revision"),
+            "controller": task.get("created_by"),
+            "worker": task.get("worker"),
+            "generation": task.get("generation"),
+            "binding_status": "current" if binding_current else "stale" if recorded_binding is not None else "unbound",
+            "delegation": recorded_binding if binding_current else None,
+            "heartbeat_age_seconds": round(heartbeat_age, 3) if heartbeat_age is not None else None,
+            "heartbeat_fresh": bool(heartbeat_age is not None and heartbeat_age <= store.ttl),
+            "progress": {key: task.get(key) for key in PROGRESS_FIELDS},
+            "last_reported_progress_event": latest_progress.get(task_id),
+            "review_needed": task.get("status") in {"worker_done", "blocked", "interrupted"},
+        })
+    return {"ok": True, "state_id": store.state_id, "after_seq": after_seq,
+            "snapshot_seq": snapshot_seq, "tasks": summaries}
 
 
 def path_key(path):
@@ -285,6 +378,8 @@ class Store:
         self.protect({"actor": actor, "action": action})
         for key in ("task_id", "worker", "lease_id", "retired_lease_id", "origin", "resources", "created_by"):
             if key in task: metadata(task[key])
+        if "delegation" in task:
+            metadata(task["delegation"])
         safe = self.protect(task)
         task.clear()
         task.update(safe)
@@ -360,6 +455,7 @@ class Store:
             raise StateError("request exceeds 1 MiB")
         request_id = safe_id(request.get("request_id"))
         actor = safe_id(request.get("actor"))
+        execution = checked_execution(request.get("execution")) if request.get("op") == "bind" else None
         digest = hashlib.sha256(json.dumps(request, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
         for key in ("request_id", "actor", "task_id", "lease_id", "source_key", "origin", "resources", "execution_pool"):
             if key in request:
@@ -421,10 +517,26 @@ class Store:
                     birth = pid_identity(pid) if pid else None
                     if pid and not birth:
                         raise StateError("worker PID is not alive")
+                    task.pop("delegation", None)
                     task.update(status="running", reservation_active=True, worker=actor, lease_id=str(uuid.uuid4()),
                                 generation=task["generation"] + 1, heartbeat_epoch=time.time(),
                                 pid=pid, pid_birth=birth, outcome_unknown=False)
+                    save_task = True
+                elif op == "bind":
+                    self.owner(task, request)
+                    if task["status"] != "running":
+                        raise StateError("worker is not running")
+                    binding = delegation_for(task, execution)
+                    current = task.get("delegation")
+                    if current is not None:
+                        if current != binding:
+                            raise StateError("task is already bound for this lease")
+                        save_task = False
+                    else:
+                        task["delegation"] = binding
+                        save_task = True
                 elif op in {"update", "heartbeat", "finish", "release"}:
+                    save_task = True
                     self.owner(task, request)
                     if task["status"] != "running" and not (op == "release" and task["status"] == "interrupted"):
                         raise StateError("worker is not running")
@@ -465,11 +577,13 @@ class Store:
                             task.update(status="interrupted", outcome_unknown=True)
                         task.update(retired_lease_id=task.get("lease_id") or task.get("retired_lease_id"), lease_id=None, pid=None, pid_birth=None)
                 elif op == "plan":
+                    save_task = True
                     if task.get("reservation_active"):
                         raise StateError("planning changes require confirmed stop and release first")
                     task.update(checked_fields(request.get("fields", {})))
                     task.update(self.declaration(request,task))
                 elif op == "requeue":
+                    save_task = True
                     if task["status"] not in {"interrupted", "blocked", "worker_done"}:
                         raise StateError("task cannot be requeued from this state")
                     evidence = request.get("resume_evidence")
@@ -478,6 +592,7 @@ class Store:
                     self.confirm_stopped(task,request)
                     task.update(status="queued", resume_evidence=scrub(evidence), worker=None)
                 elif op == "accept":
+                    save_task = True
                     if task["status"] != "worker_done" or actor == task.get("worker"):
                         raise StateError("independent controller acceptance required")
                     checks = request.get("checks", {})
@@ -487,7 +602,8 @@ class Store:
                     task.update(status="accepted", acceptance={"actor": actor, "at": now(), "checks": scrub(checks)})
                 else:
                     raise StateError("unknown operation")
-                self.save(task, actor, op)
+                if save_task:
+                    self.save(task, actor, op)
             result = self.protect({"ok": True, "request_id": request_id, "task": task})
             self.db.execute("INSERT INTO requests VALUES(?,?,?)", (request_id, digest, json.dumps(result, ensure_ascii=False)))
         return result
@@ -790,6 +906,10 @@ def main():
     p=sub.add_parser('request');g=p.add_mutually_exclusive_group(required=True);g.add_argument('--file');g.add_argument('--stdin',action='store_true')
     p=sub.add_parser('read');p.add_argument('task_id')
     p=sub.add_parser('history');p.add_argument('task_id')
+    p=sub.add_parser('supervise');p.add_argument('--task-id',action='append',required=True);p.add_argument('--after-seq',type=int,default=0)
+    p=sub.add_parser('run');p.add_argument('--task-id',required=True);p.add_argument('--actor',required=True)
+    p.add_argument('--executor',default='command');p.add_argument('--cwd');p.add_argument('--heartbeat-seconds',type=float);p.add_argument('--run-id')
+    p.add_argument('command',nargs=argparse.REMAINDER)
     sub.add_parser('overview');sub.add_parser('tick')
     p=sub.add_parser('watch');p.add_argument('--interval',type=float,default=2)
     args=ap.parse_args();store=None
@@ -797,14 +917,24 @@ def main():
         if args.cmd=='bootstrap':result=bootstrap(args.config,args.root,args.exchange,args.local_capacity)
         elif args.cmd=='join':result=join(args.config,args.state_id)
         elif args.cmd=='doctor':result=doctor(args.config)
+        elif args.cmd=='run':
+            command=args.command
+            if command and command[0]=='--':command=command[1:]
+            if not command:raise StateError('command argv required after --')
+            from shared_task_state_mcp.runner import run, exit_status
+            result=run(args.config,args.task_id,args.actor,command,cwd=args.cwd,executor=args.executor,
+                       heartbeat_seconds=args.heartbeat_seconds,run_id=args.run_id)
         else:
-            config=_read_config(args.config);store=Store(config)
+            config=_read_config(args.config);store=Store(config,readonly=args.cmd=='supervise')
             if args.cmd=='request':
                 result=store.apply(json.loads(sys.stdin.read(1048577) if args.stdin else Path(args.file).read_text(encoding='utf-8')));store.export()
             elif args.cmd=='read':result=store.get(args.task_id)
             elif args.cmd=='history':
                 store.get(args.task_id)
                 result=[{'seq':r[0],'at':r[1],'actor':r[2],'action':r[3],'task':json.loads(r[4])} for r in store.db.execute('SELECT seq,at,actor,action,snapshot FROM events WHERE task_id=? ORDER BY seq',(args.task_id,))]
+            elif args.cmd=='supervise':
+                store.db.execute('BEGIN')
+                result=supervise(store,args.task_id,args.after_seq)
             elif args.cmd=='overview':store.reconcile();result=store.export()
             elif args.cmd=='tick':result=processor_tick(store)
             else:
@@ -813,7 +943,7 @@ def main():
                     try:processor_tick(store)
                     except (StateError,OSError,sqlite3.Error) as exc:print(json.dumps({'ok':False,'error':scrub(str(exc))}),file=sys.stderr,flush=True)
                     time.sleep(args.interval)
-        print(json.dumps(store.protect(result) if store else protected(result),ensure_ascii=False,indent=2));return 0
+        print(json.dumps(store.protect(result) if store else protected(result),ensure_ascii=False,indent=2));return exit_status(result) if args.cmd=='run' else 0
     except (StateError,OSError,sqlite3.Error,ValueError,TypeError,RecursionError,KeyError) as exc:
         print(json.dumps({'ok':False,'error':scrub(str(exc))},ensure_ascii=False),file=sys.stderr);return 1
     finally:

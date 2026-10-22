@@ -86,6 +86,10 @@ class Backend:
             return self.protect(store, {'ok': True, 'state_id': self.state_id, 'events': events,
                 'has_more': len(rows) > limit, 'next_after_seq': events[-1]['seq'] if events else after_seq})
 
+    def supervise(self, task_ids, after_seq=0):
+        with self.store() as store:
+            return self.protect(store, state.supervise(store, task_ids, after_seq))
+
     def apply(self, request):
         if not isinstance(request, dict) or 'pid' in request:
             raise state.StateError('request object required; worker PIDs are not accepted through MCP')

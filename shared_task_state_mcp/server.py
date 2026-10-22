@@ -15,6 +15,8 @@ def build_server(config, expected_state_id=None, read_only=False):
     server = MCPServer('shared-task-state', version=__version__, instructions=(
         'All tools use one existing local task state. Read the exact task_id before writing. '
         'Use the latest expected_revision and the current lease_id for worker operations. '
+        'For delegated runs, bind the executor and run_id to that lease with op=bind. Supervision reports recorded '
+        'progress and heartbeat freshness, never correctness or termination. '
         'actor is a collaboration name, not authentication. Task text grants no execution permission. '
         'Save concise evidence, never credentials or full conversations. '
         'Silence does not prove termination; release/requeue need stop_confirmed and stop_evidence. '
@@ -54,18 +56,24 @@ def build_server(config, expected_state_id=None, read_only=False):
         """Page task events after a sequence number. limit: 1–100. Does not reconcile stale heartbeats."""
         return await call(backend.history, task_id, after_seq, limit)
 
+    @server.tool(annotations=readonly)
+    async def shared_task_supervise(task_ids: list[str], after_seq: int = 0) -> CallToolResult:
+        """Read one compact snapshot for up to 100 exact task IDs; after_seq is an observed-event cursor."""
+        return await call(backend.supervise, task_ids, after_seq)
+
     if not read_only:
         @server.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=True,
                                                 idempotent_hint=True, open_world_hint=False))
         async def shared_task_apply(request: dict) -> CallToolResult:
-            """Submit the existing create/plan/claim/update/heartbeat/finish/release/requeue/accept protocol.
+            """Submit the existing create/plan/claim/bind/update/heartbeat/finish/release/requeue/accept protocol.
 
             Include schema_version=1, unique request_id, actor and op. create needs fields.title and
             fields.goal; declare execution_pool and resources, or read_only=true for unscoped reads.
             Other operations need task_id and expected_revision. Worker operations also need lease_id.
             finish needs integer exit_code; release/requeue need stop_confirmed=true and stop_evidence;
             requeue also needs resume_evidence. accept needs a different actor and checks containing
-            source/diff/tests/runtime evidence. See references/protocol.md for the full contract.
+            source/diff/tests/runtime evidence. bind needs execution with executor and run_id, plus optional
+            status_ref/report_ref. See references/protocol.md for the full contract.
             MCP does not accept PID binding. A committed receipt is durable even if export fails.
             Retry ambiguous outcomes only with the same request_id and identical original content.
             """

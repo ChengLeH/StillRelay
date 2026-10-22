@@ -144,7 +144,8 @@ class WireTests(unittest.IsolatedAsyncioTestCase):
                     await client.initialize()
                     tools = (await client.list_tools()).tools
                     self.assertEqual({t.name for t in tools}, {'shared_task_status', 'shared_task_overview',
-                                     'shared_task_read', 'shared_task_history', 'shared_task_apply'})
+                                     'shared_task_read', 'shared_task_history', 'shared_task_supervise',
+                                     'shared_task_apply'})
                     response = await client.call_tool('shared_task_apply', {'request': req})
                     self.assertFalse(response.is_error, response)
                     task = response.structured_content['receipt']['task']

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "shared-task-state-mcp"
 dynamic = ["version"]
-description = "Local MCP tools for durable task state shared by cooperating agents"
+description = "StillRelay: quiet delegation, shared task progress and periodic supervision"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
