@@ -9,7 +9,7 @@ The optional `shared-task-state-mcp` package runs on the same host as your task 
 Requires Python 3.10+ and [uv](https://docs.astral.sh/uv/getting-started/installation/). On macOS, Linux, or Windows:
 
 ```sh
-uv tool install 'git+https://github.com/ChengLeH/shared-task-state@main'
+uv tool install 'git+https://github.com/ChengLeH/StillRelay@main'
 ```
 
 If the commands are not found, run `uv tool update-shell` and open a new terminal. Alternatively, install this repository in a persistent virtual environment with `python -m pip install .`. This package is distributed from GitHub; these instructions do not assume a PyPI release. Replace `main` with an audited commit SHA to pin an installation. Upgrade an existing uv installation with `uv tool upgrade shared-task-state-mcp`.
@@ -73,7 +73,7 @@ Clients accepting `command` and `args` can use the generated standard configurat
   "mcpServers": {
     "shared-task-state": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/ChengLeH/shared-task-state@main", "shared-task-state-mcp"]
+      "args": ["--from", "git+https://github.com/ChengLeH/StillRelay@main", "shared-task-state-mcp"]
     }
   }
 }
@@ -102,7 +102,7 @@ The package retains the core credential guard and any configured offline `privac
 
 Give a local agent with installation and settings-write permissions this prompt:
 
-> Install the Shared Task State MCP from https://github.com/ChengLeH/shared-task-state using a persistent uv tool install pinned to a reviewed Git commit. Find my existing shared task configuration first; do not initialize another database. If no state exists, ask whether this is a new installation before running `shared-task-state-mcp init`. Generate the appropriate configuration with `client-config --client antigravity` (or `hermes`), merge only that server entry into my existing client settings, preserve the other entries, reload MCP, and verify `shared_task_status` against the expected state UUID. Do not create a task as a connection test. Keep local config, database, credentials and backups out of Git.
+> Install the Shared Task State MCP from https://github.com/ChengLeH/StillRelay using a persistent uv tool install pinned to a reviewed Git commit. Find my existing shared task configuration first; do not initialize another database. If no state exists, ask whether this is a new installation before running `shared-task-state-mcp init`. Generate the appropriate configuration with `client-config --client antigravity` (or `hermes`), merge only that server entry into my existing client settings, preserve the other entries, reload MCP, and verify `shared_task_status` against the expected state UUID. Do not create a task as a connection test. Keep local config, database, credentials and backups out of Git.
 
 This is an instruction for an agent that can edit local settings, not a claim of a built-in natural-language installer or marketplace listing. The automated acceptance test covers the installed package and actual MCP transport; Antigravity/Hermes application UI sessions require validation on the user's installed clients.
 

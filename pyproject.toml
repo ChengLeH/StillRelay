@@ -13,8 +13,8 @@ authors = [{name = "ChengLeH"}]
 dependencies = ["mcp>=2.3.0,<3"]
 
 [project.urls]
-Repository = "https://github.com/ChengLeH/shared-task-state"
-Documentation = "https://github.com/ChengLeH/shared-task-state/blob/main/references/mcp.md"
+Repository = "https://github.com/ChengLeH/StillRelay"
+Documentation = "https://github.com/ChengLeH/StillRelay/blob/main/references/mcp.md"
 
 [project.scripts]
 shared-task-state = "shared_task_state.state:main"

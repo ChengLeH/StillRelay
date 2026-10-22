@@ -79,7 +79,7 @@ Query the executor's reconciled discovery/attach/result interface when available
 
 ## Give an agent this setup request
 
-> Install StillRelay from ChengLeH/shared-task-state using its MCP guide. Join the existing shared configuration rather than initializing another state. Load the optional silent-delegation Skill if this client supports skills. Use my already-authorized executor for background work, keep verbose logs local, and periodically inspect shared progress and selected evidence. Do not change model concurrency or permissions. Tell me which connection and execution capabilities were verified.
+> Install StillRelay from ChengLeH/StillRelay using its MCP guide. Join the existing shared configuration rather than initializing another state. Load the optional silent-delegation Skill if this client supports skills. Use my already-authorized executor for background work, keep verbose logs local, and periodically inspect shared progress and selected evidence. Do not change model concurrency or permissions. Tell me which connection and execution capabilities were verified.
 
 ## Update and rollback
 

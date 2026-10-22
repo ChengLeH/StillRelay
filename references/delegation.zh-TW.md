@@ -77,7 +77,7 @@ MCP 使用 `shared_task_supervise`，提供任務 ID 與上次回傳的事件遊
 
 ## 可直接給 agent 的設定要求
 
-> 請依 ChengLeH/shared-task-state 的 MCP 指南安裝 StillRelay，加入現有共用設定，不另建狀態。如果本用戶端支援 Skill，載入選用的 silent-delegation Skill。使用我已授權的執行器做背景工作，詳細日誌留在執行端，間隔讀取共同進度與查證必要證據。不要更改模型並行數或權限。回報實際驗證過的連線與執行能力。
+> 請依 ChengLeH/StillRelay 的 MCP 指南安裝 StillRelay，加入現有共用設定，不另建狀態。如果本用戶端支援 Skill，載入選用的 silent-delegation Skill。使用我已授權的執行器做背景工作，詳細日誌留在執行端，間隔讀取共同進度與查證必要證據。不要更改模型並行數或權限。回報實際驗證過的連線與執行能力。
 
 ## 升級與回滾
 

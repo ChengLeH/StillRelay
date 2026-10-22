@@ -206,7 +206,24 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(actions, ["create", "claim", "bind", "finish"])
 
     def test_sustained_child_receives_serial_real_heartbeats(self):
-        result = self.run_command([sys.executable, "-c", "import time; time.sleep(0.30)"])
+        command = """import sqlite3, sys, time
+connection = sqlite3.connect(sys.argv[1])
+deadline = time.monotonic() + 15
+try:
+    while time.monotonic() < deadline:
+        count = connection.execute(
+            "SELECT COUNT(*) FROM events WHERE task_id=? AND action='heartbeat'",
+            (sys.argv[2],)).fetchone()[0]
+        if count >= 2:
+            break
+        time.sleep(0.01)
+    else:
+        raise SystemExit("Two committed heartbeats were not observed")
+finally:
+    connection.close()
+"""
+        result = self.run_command([sys.executable, "-c", command,
+                                   str(self.base / "db" / "state.sqlite"), self.task["task_id"]])
         events = self.events()
         heartbeat_events = [event for event in events if event["action"] == "heartbeat"]
 

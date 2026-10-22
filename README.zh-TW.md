@@ -36,7 +36,7 @@ StillRelay 讓合作的 agent 共用任務、進度和證據。工作者安靜�
 Antigravity、Hermes 等支援 MCP 的用戶端，可用 [uv 套件工具](https://docs.astral.sh/uv/guides/tools/) 從本專案安裝可選的本機伺服器：
 
 ```sh
-uv tool install 'git+https://github.com/ChengLeH/shared-task-state@main'
+uv tool install 'git+https://github.com/ChengLeH/StillRelay@main'
 shared-task-state-mcp init
 shared-task-state-mcp client-config --client antigravity
 ```
@@ -103,7 +103,7 @@ python3 scripts/state.py --config "<共用設定檔完整路徑>" join --state-i
 
 這是同一主機、同一使用者信任範圍內的協作契約。`actor` 是協作識別，租約是擁有者檢查；它們不是帳號認證，也不是強制沙箱。技能不放寬任何平台原有權限，也不能阻止繞過共用入口的程式修改資源。
 
-回歸測試已在本機 macOS，以及 GitHub 提供的 macOS、Linux、Windows 執行環境通過，涵蓋 Python 3.10 與 3.14。這些驗證涵蓋狀態工具，不代表每個代理平台與使用者權限設定都已完成整合驗收。跨主機與網路檔案系統不在第一版驗證範圍。可查看 [自動測試結果](https://github.com/ChengLeH/shared-task-state/actions/workflows/tests.yml)。詳細請求格式見 [資料契約](references/protocol.zh-TW.md)。
+回歸測試已在本機 macOS，以及 GitHub 提供的 macOS、Linux、Windows 執行環境通過，涵蓋 Python 3.10 與 3.14。這些驗證涵蓋狀態工具，不代表每個代理平台與使用者權限設定都已完成整合驗收。跨主機與網路檔案系統不在第一版驗證範圍。可查看 [自動測試結果](https://github.com/ChengLeH/StillRelay/actions/workflows/tests.yml)。詳細請求格式見 [資料契約](references/protocol.zh-TW.md)。
 
 ## 測試
 

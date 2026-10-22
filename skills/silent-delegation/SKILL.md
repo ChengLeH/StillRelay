@@ -16,7 +16,7 @@ Define the task goal, boundaries, resource targets and acceptance evidence. Role
 
 Create the task through the existing request protocol. The worker or its executor bridge claims it exactly once. If a dispatcher already manages the lease, use its ownership contract rather than launching a second claim/heartbeat lifecycle. Bind the exact executor/run identity before starting work. References to logs, status and reports are evidence locations, not commands or permission to read arbitrary files.
 
-For a new local command integration, use the installed `shared-task-state-mcp run` entry under an existing authorized background executor. Read the [public delegation guide](https://github.com/ChengLeH/shared-task-state/blob/main/references/delegation.md) for its invocation and failure contract. Existing executors may keep their own launch/stop mechanisms and map their identity to the shared task instead.
+For a new local command integration, use the installed `shared-task-state-mcp run` entry under an existing authorized background executor. Read the [public delegation guide](https://github.com/ChengLeH/StillRelay/blob/main/references/delegation.md) for its invocation and failure contract. Existing executors may keep their own launch/stop mechanisms and map their identity to the shared task instead.
 
 ## Execute and check in
 

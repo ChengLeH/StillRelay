@@ -36,7 +36,7 @@ These are **supervisor-visible tool payloads**, counted with `o200k_base`, three
 For MCP-capable clients such as Antigravity or Hermes, install the optional local server from this repository using [uv](https://docs.astral.sh/uv/guides/tools/):
 
 ```sh
-uv tool install 'git+https://github.com/ChengLeH/shared-task-state@main'
+uv tool install 'git+https://github.com/ChengLeH/StillRelay@main'
 shared-task-state-mcp init
 shared-task-state-mcp client-config --client antigravity
 ```
@@ -103,7 +103,7 @@ Both release and requeue require `stop_confirmed=true` and nonempty `stop_eviden
 
 This is a cooperation contract for one host within one user's trust boundary. `actor` identifies a participant, and leases check ownership; neither provides account authentication or an enforced sandbox. The skill preserves platform permissions and cannot prevent programs that bypass its entry points from changing resources.
 
-The test workflow covers the helper and installed MCP transport on macOS, Linux and Windows with Python 3.10 and 3.14. These checks cover the helper; they do not establish integration with every agent platform or user permission setup. Cross-host use and network filesystems are outside the first release's verified scope. See the [automated test results](https://github.com/ChengLeH/shared-task-state/actions/workflows/tests.yml). See the [protocol](references/protocol.md) for request formats.
+The test workflow covers the helper and installed MCP transport on macOS, Linux and Windows with Python 3.10 and 3.14. These checks cover the helper; they do not establish integration with every agent platform or user permission setup. Cross-host use and network filesystems are outside the first release's verified scope. See the [automated test results](https://github.com/ChengLeH/StillRelay/actions/workflows/tests.yml). See the [protocol](references/protocol.md) for request formats.
 
 ## Tests
 

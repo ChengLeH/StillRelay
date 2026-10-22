@@ -9,7 +9,7 @@
 需要 Python 3.10 以上與 [uv 套件工具](https://docs.astral.sh/uv/getting-started/installation/)。macOS、Linux、Windows 使用相同指令：
 
 ```sh
-uv tool install 'git+https://github.com/ChengLeH/shared-task-state@main'
+uv tool install 'git+https://github.com/ChengLeH/StillRelay@main'
 ```
 
 找不到安裝後的指令時，執行 `uv tool update-shell` 後重開終端機。也可在持續保留的虛擬環境中，從專案根目錄執行 `python -m pip install .`。套件直接從 GitHub 安裝，這裡沒有宣稱已發布到 PyPI（Python 套件索引）。正式使用可將 `main` 改成檢查過的提交 SHA（提交識別碼）；更新 uv 安裝用 `uv tool upgrade shared-task-state-mcp`。
@@ -73,7 +73,7 @@ shared-task-state-mcp client-config --client hermes
   "mcpServers": {
     "shared-task-state": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/ChengLeH/shared-task-state@main", "shared-task-state-mcp"]
+      "args": ["--from", "git+https://github.com/ChengLeH/StillRelay@main", "shared-task-state-mcp"]
     }
   }
 }
@@ -101,7 +101,7 @@ shared-task-state-mcp client-config --client hermes
 
 ## 可直接交給本機代理的提示詞
 
-> 請從 https://github.com/ChengLeH/shared-task-state 安裝 Shared Task State MCP，使用持續保留的 uv 工具環境並固定到已檢查的 Git 提交。先找我既有的共用任務設定，不另建資料庫。只有確認沒有既有狀態時，才詢問是否全新安裝，再執行 `shared-task-state-mcp init`。用 `client-config --client antigravity`（Hermes 則用 `hermes`）產生設定，只合併該伺服器項目到目前用戶端設定，保留其他項目。重新載入 MCP 後呼叫 `shared_task_status`，確認狀態 UUID 與原本一致，不用建立任務測試連線。不要把本機設定、資料庫、憑證或備份提交到 Git。
+> 請從 https://github.com/ChengLeH/StillRelay 安裝 Shared Task State MCP，使用持續保留的 uv 工具環境並固定到已檢查的 Git 提交。先找我既有的共用任務設定，不另建資料庫。只有確認沒有既有狀態時，才詢問是否全新安裝，再執行 `shared-task-state-mcp init`。用 `client-config --client antigravity`（Hermes 則用 `hermes`）產生設定，只合併該伺服器項目到目前用戶端設定，保留其他項目。重新載入 MCP 後呼叫 `shared_task_status`，確認狀態 UUID 與原本一致，不用建立任務測試連線。不要把本機設定、資料庫、憑證或備份提交到 Git。
 
 代理需有安裝及修改本機設定的權限；這不是宣稱用戶端內建任意 GitHub MCP 的自然語言安裝器，也不是商店上架。自動化測試驗證已安裝套件與實際 MCP 協定；Anti-Gravity／Hermes 應用程式畫面的完整連線仍需在使用者實際版本驗證。
 
