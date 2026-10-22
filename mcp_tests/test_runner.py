@@ -273,7 +273,9 @@ class RunnerTests(unittest.TestCase):
 
             def wait(self, timeout=None):
                 if self.returncode is None:
-                    os.kill(os.getpid(), signal.SIGTERM)
+                    # os.kill(SIGTERM) uses TerminateProcess on Windows and
+                    # kills the test harness instead of invoking its handler.
+                    signal.raise_signal(signal.SIGTERM)
                 return self.returncode
 
             def terminate(self):
