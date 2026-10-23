@@ -12,7 +12,7 @@ To require a local file check, an administrator first adds `artifact_roots` to t
 {"artifact_roots": ["/absolute/project/output"]}
 ```
 
-This is an optional configuration key, not a new configuration schema or database. Omit it to disable local artifact reads. Choose a narrow output directory, never a home directory or credential store. It does not change OS permissions or provide a sandbox against other programs running as the same user.
+This is an optional configuration key, not a new configuration schema or database. Omit it to disable local artifact reads. Choose a narrow output directory, never a home directory or credential store. It does not change OS permissions or provide a sandbox against other programs running as the same user. Checks add no HTTP endpoint, hosted service or remote file-access path; the MCP server remains local stdio.
 
 Before relying on checks over MCP, call `shared_task_status`: require `evidence_contract_version=1` and `artifact_checks_enabled=true`. An older or private adapter without these capabilities must not be assumed to enforce this contract. Update all clients that write facts before mixing versions; no automatic Host rollout is included.
 
@@ -54,7 +54,7 @@ The server adds `status=reported_with_source`, `reported_by`, `reported_at`, `ge
 
 ## Upgrade without rewriting old evidence
 
-0.3 changes the **fact write contract**: update clients that submit string facts. They can move an unverified observation into `summary`, or submit a sourced object. MCP command names and client connection settings stay the same. CLI and MCP use the same rules.
+0.3 changes the **fact write contract**: update clients that submit string facts. They can move an unverified observation into `summary`, or submit a sourced object. Package names, CLI commands, MCP tool names and client connection settings stay the same; these names do not make the old fact payload compatible. CLI and MCP use the same rules. See the [v0.3.0 release and pinned upgrade steps](../docs/releases/0.3.0.md).
 
 Old fact strings are returned as `legacy_unverified` objects with deterministic IDs and empty sources/method. Reads do not rewrite database rows. Later task updates preserve that classification; history reads annotate legacy snapshots without rewriting stored events. Old committed receipts keep their original replay payload. Read current task/history for the annotated view. A previously read fact object may be resubmitted unchanged; it cannot be used to forge new server stamps. No database replacement, automatic acceptance or production Host migration occurs.
 

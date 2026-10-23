@@ -10,7 +10,7 @@ One finds the clue. One builds the fix. One checks the work. Let each do its thi
 
 StillRelay gives cooperating agents one durable place for tasks, progress and evidence. Workers run quietly. Delegators check in at intervals, inspect what changed, and step in when needed. A new chat can pick up the same task instead of starting the story again.
 
-> Formerly **Shared Task State**. Existing package names, commands and MCP bindings stay compatible. Three characters illustrate the workflow; they are not an agent limit.
+> Formerly **Shared Task State**. Package names, CLI commands and MCP connection names remain the same. StillRelay 0.3 changes the `verified_facts` write format, so clients that send fact strings must be updated. Three characters illustrate the workflow; they are not an agent limit.
 
 - **Quiet work, visible progress.** Keep verbose logs with the executor. Share confirmed steps, blockers and the next action.
 - **Roles travel with tasks.** A can delegate to B while working on a different task from B.
@@ -19,7 +19,7 @@ StillRelay gives cooperating agents one durable place for tasks, progress and ev
 
 [Connect through MCP](references/mcp.md) · [Silent delegation guide](references/delegation.md) · [Optional delegation Skill](skills/silent-delegation/SKILL.md)
 
-**0.3 evidence update:** cumulative records no longer disappear when a client sends a shorter list. New fact writes need sources and a checking method; old facts stay visibly unverified. Optional local artifact checks reject missing files or hash mismatches inside configured output directories. Plain references remain unverified. [Contract, upgrade notes and trust limits](references/evidence.md).
+**0.3 evidence update:** shorter updates no longer erase accumulated facts, attempts, artifact references or backups; retractions keep the original and explain why it was withdrawn. New `verified_facts` writes need an ID, statement, checking method and sources. Old fact strings read as `legacy_unverified`. Optional local SHA-256 checks run only when an administrator configures `artifact_roots`; ordinary artifact references remain unverified, and a recorded file check does not certify a claim or preserve an immutable copy. Update clients that write string facts before using 0.3. [Evidence contract](references/evidence.md) · [v0.3.0 release and pinned upgrade steps](docs/releases/0.3.0.md).
 
 ## Less log reading, measured
 
