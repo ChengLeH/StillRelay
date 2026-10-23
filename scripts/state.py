@@ -16,6 +16,8 @@ import uuid
 import unicodedata
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from privacy_guard import PrivacyError, scrub as privacy_scrub, check_metadata, guard
+import evidence
+from evidence import StateError
 
 
 _CASE_CAPS = {}
@@ -27,10 +29,6 @@ LIST_FIELDS = {"constraints", "verified_facts", "failed_attempts", "artifacts", 
 PROGRESS_FIELDS = ("phase", "summary", "last_confirmed_step", "next_step", "blockers")
 EXECUTION_FIELDS = {"executor", "run_id", "status_ref", "report_ref"}
 
-
-
-class StateError(Exception):
-    pass
 
 
 def now():
@@ -70,8 +68,10 @@ def checked_fields(fields):
         raise StateError("unknown task fields")
     for k, v in fields.items():
         if k in LIST_FIELDS:
-            if not isinstance(v, list) or len(v) > 100 or any(not isinstance(x, str) for x in v):
-                raise StateError("list of strings required: " + k)
+            expected_type = dict if k == 'verified_facts' else str
+            if not isinstance(v, list) or len(v) > 100 or any(not isinstance(x, expected_type) for x in v):
+                raise StateError(('list of sourced fact objects required: ' if k == 'verified_facts'
+                                  else 'list of strings required: ') + k)
         elif not isinstance(v, str):
             raise StateError("string required: " + k)
     if len(json.dumps(fields, ensure_ascii=False).encode()) > 32768:
@@ -363,16 +363,22 @@ class Store:
         return protected(value, self.config.get("privacy_scanner"))
 
     def all(self):
-        return self.protect([json.loads(r[0]) for r in self.db.execute("SELECT data FROM tasks ORDER BY id")])
+        return self.protect([evidence.task_view(json.loads(r[0])) for r in self.db.execute("SELECT data FROM tasks ORDER BY id")])
 
     def get(self, task_id):
         safe_id(task_id)
         row = self.db.execute("SELECT data FROM tasks WHERE id=?", (task_id,)).fetchone()
         if not row:
             raise StateError("task not found")
-        return self.protect(json.loads(row[0]))
+        return self.protect(evidence.task_view(json.loads(row[0])))
+
+    def fields(self, task, request, actor):
+        evidence.merge_fields(task, checked_fields(request.get('fields', {})), actor, self.db)
+        evidence.retract(task, request.get('retractions', []), actor)
 
     def save(self, task, actor, action):
+        task.update(evidence.task_view(task))
+        evidence.bounded({k: task[k] for k in EDITABLE | {'artifact_evidence', 'retractions'} if k in task})
         metadata(actor)
         metadata(action)
         self.protect({"actor": actor, "action": action})
@@ -460,6 +466,13 @@ class Store:
         for key in ("request_id", "actor", "task_id", "lease_id", "source_key", "origin", "resources", "execution_pool"):
             if key in request:
                 metadata(request[key])
+        if 'artifact_checks' in request:
+            metadata(request['artifact_checks'])
+        fields = request.get('fields')
+        if isinstance(fields, dict) and isinstance(fields.get('verified_facts'), list):
+            for fact in fields['verified_facts']:
+                if isinstance(fact, dict):
+                    metadata({k: fact[k] for k in ('id', 'sources') if k in fact})
         request = self.protect(request)
         with self.transaction():
             prior = self.db.execute("SELECT digest,result FROM requests WHERE id=?", (request_id,)).fetchone()
@@ -468,6 +481,10 @@ class Store:
                     raise StateError("request_id reused with different content")
                 return self.protect(json.loads(prior[1]))
             op = request.get("op")
+            if 'artifact_checks' in request and op != 'finish':
+                raise StateError('artifact_checks are accepted only on finish')
+            if 'retractions' in request and op not in {'update', 'finish', 'plan'}:
+                raise StateError('retractions require update, finish or plan')
             if op == "create":
                 fields = checked_fields(request.get("fields", {}))
                 if not fields.get("title") or not fields.get("goal"):
@@ -491,7 +508,8 @@ class Store:
                             "created_by": actor, "created_at": now(), "updated_at": now(),
                             "phase": "prepare", "summary": "", "last_confirmed_step": "", "next_step": "",
                             'execution_pool':None,'resources':[],'read_only':False,'reservation_active':False,
-                            "origin": scrub(origin), **{k: [] for k in LIST_FIELDS}, **fields}
+                            "origin": scrub(origin), **{k: [] for k in LIST_FIELDS}}
+                    self.fields(task, request, actor)
                     task.update(self.declaration(request,task))
                     self.db.execute("INSERT INTO tasks(id,source_key,data) VALUES(?,?,?)",
                                     (task_id, source_key, json.dumps(task, ensure_ascii=False)))
@@ -541,7 +559,7 @@ class Store:
                     if task["status"] != "running" and not (op == "release" and task["status"] == "interrupted"):
                         raise StateError("worker is not running")
                     if op == "update":
-                        task.update(checked_fields(request.get("fields", {})))
+                        self.fields(task, request, actor)
                     if op == "heartbeat" and request.get("pid"):
                         if not isinstance(request["pid"], int) or isinstance(request["pid"], bool):
                             raise StateError("positive integer worker PID required")
@@ -556,7 +574,13 @@ class Store:
                         if op == "release":self.confirm_stopped(task,request)
                         if op == "finish":
                             task["reservation_active"]=False
-                            task.update(checked_fields(request.get("fields", {})))
+                            observed = evidence.inspect_files(request.get('artifact_checks', []),
+                                                              self.config.get('artifact_roots', []), task, actor)
+                            task['artifact_evidence'].extend(observed)
+                            for item in observed:
+                                if item['path'] not in task['artifacts']:
+                                    task['artifacts'].append(item['path'])
+                            self.fields(task, request, actor)
                             exit_code = request.get("exit_code")
                             if not isinstance(exit_code, int) or isinstance(exit_code, bool):
                                 raise StateError("integer exit_code required")
@@ -569,8 +593,10 @@ class Store:
                                 # Ownership was checked inside this transaction.
                                 # Each lease owns an immutable report namespace.
                                 report_path = self.root / "reports" / (task["task_id"] + "-" + task["lease_id"] + ".md")
-                                write_atomic(report_path, scrub(report))
                                 task["artifacts"] = list(dict.fromkeys(task["artifacts"] + [str(report_path)]))
+                                # Validate the final merged projection before filesystem side effects.
+                                evidence.bounded({k: task[k] for k in EDITABLE | {'artifact_evidence', 'retractions'} if k in task})
+                                write_atomic(report_path, scrub(report))
                             task.update(status="worker_done" if exit_code == 0 else "blocked", exit_code=exit_code,
                                         outcome_unknown=exit_code != 0)
                         else:
@@ -580,17 +606,17 @@ class Store:
                     save_task = True
                     if task.get("reservation_active"):
                         raise StateError("planning changes require confirmed stop and release first")
-                    task.update(checked_fields(request.get("fields", {})))
+                    self.fields(task, request, actor)
                     task.update(self.declaration(request,task))
                 elif op == "requeue":
                     save_task = True
                     if task["status"] not in {"interrupted", "blocked", "worker_done"}:
                         raise StateError("task cannot be requeued from this state")
-                    evidence = request.get("resume_evidence")
-                    if not isinstance(evidence, str) or not evidence.strip():
+                    resume_evidence = request.get("resume_evidence")
+                    if not isinstance(resume_evidence, str) or not resume_evidence.strip():
                         raise StateError("resume_evidence required; never replay unknown side effects blindly")
                     self.confirm_stopped(task,request)
-                    task.update(status="queued", resume_evidence=scrub(evidence), worker=None)
+                    task.update(status="queued", resume_evidence=scrub(resume_evidence), worker=None)
                 elif op == "accept":
                     save_task = True
                     if task["status"] != "worker_done" or actor == task.get("worker"):
@@ -751,6 +777,10 @@ def validate_config(config):
     except (ValueError,TypeError,KeyError,AttributeError):raise StateError('invalid state identity')
     for key in ['root','exchange']:
         if not isinstance(config.get(key),str) or not Path(config[key]).is_absolute():raise StateError('absolute '+key+' path required')
+    roots = config.get('artifact_roots', [])
+    if not isinstance(roots, list) or len(roots) > 100 or any(not isinstance(p, str) or '\0' in p or not Path(p).is_absolute() for p in roots):
+        raise StateError('artifact_roots must be a bounded list of absolute directories')
+    metadata(roots)
     limits=config.get('pool_limits')
     if not isinstance(limits,dict) or not limits or any(not isinstance(k,str) or not ID.fullmatch(k) or v is not None and (not isinstance(v,int) or isinstance(v,bool) or v<1) for k,v in limits.items()):
         raise StateError('invalid execution pool limits')
@@ -931,7 +961,7 @@ def main():
             elif args.cmd=='read':result=store.get(args.task_id)
             elif args.cmd=='history':
                 store.get(args.task_id)
-                result=[{'seq':r[0],'at':r[1],'actor':r[2],'action':r[3],'task':json.loads(r[4])} for r in store.db.execute('SELECT seq,at,actor,action,snapshot FROM events WHERE task_id=? ORDER BY seq',(args.task_id,))]
+                result=[{'seq':r[0],'at':r[1],'actor':r[2],'action':r[3],'task':evidence.task_view(json.loads(r[4]))} for r in store.db.execute('SELECT seq,at,actor,action,snapshot FROM events WHERE task_id=? ORDER BY seq',(args.task_id,))]
             elif args.cmd=='supervise':
                 store.db.execute('BEGIN')
                 result=supervise(store,args.task_id,args.after_seq)

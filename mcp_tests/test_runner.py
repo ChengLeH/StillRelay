@@ -73,6 +73,8 @@ class RunnerTests(unittest.TestCase):
         actions = [event["action"] for event in self.events()]
         self.assertEqual(result["status"], "worker_done")
         self.assertEqual(result["exit_code"], 0)
+        self.assertEqual(result['exit_code_source'], 'subprocess_wait')
+        self.assertIn('reported_by_worker', task['exit_code_trust'])
         self.assertFalse(result["reservation_active"])
         self.assertEqual(task["status"], "worker_done")
         self.assertFalse(task["reservation_active"])
@@ -203,7 +205,9 @@ class RunnerTests(unittest.TestCase):
         task = self.current()
         self.assertEqual(task["status"], "worker_done")
         actions = [event["action"] for event in self.events()]
-        self.assertEqual(actions, ["create", "claim", "bind", "finish"])
+        self.assertEqual(actions[:3], ["create", "claim", "bind"])
+        self.assertTrue(all(action == "heartbeat" for action in actions[3:-1]))
+        self.assertEqual(actions[-1], "finish")
 
     def test_sustained_child_receives_serial_real_heartbeats(self):
         command = """import sqlite3, sys, time

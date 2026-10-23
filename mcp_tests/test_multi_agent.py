@@ -81,7 +81,7 @@ class MultiAgentWireTests(unittest.IsolatedAsyncioTestCase):
                     outputs[index] = completed.stdout.strip()
                     task = await apply(worker, 'update', tasks[index], fields={
                         'phase': 'verification', 'last_confirmed_step': f'Checked fixture {index}',
-                        'verified_facts': [f'Independent command result: {outputs[index]}'],
+                        'summary': f'Reported command result: {outputs[index]}',
                         'next_step': 'Controller checks result evidence'})
                     return await apply(worker, 'heartbeat', task)
 

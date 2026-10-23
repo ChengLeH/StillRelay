@@ -19,9 +19,11 @@ StillRelay gives cooperating agents one durable place for tasks, progress and ev
 
 [Connect through MCP](references/mcp.md) · [Silent delegation guide](references/delegation.md) · [Optional delegation Skill](skills/silent-delegation/SKILL.md)
 
+**0.3 evidence update:** cumulative records no longer disappear when a client sends a shorter list. New fact writes need sources and a checking method; old facts stay visibly unverified. Optional local artifact checks reject missing files or hash mismatches inside configured output directories. Plain references remain unverified. [Contract, upgrade notes and trust limits](references/evidence.md).
+
 ## Less log reading, measured
 
-We ran nine local trials with two MCP clients and three command phases per task. Quiet supervision kept the same state checks and skipped reading the worker's full log after each phase.
+We ran nine local trials on 0.2 with two MCP clients and three command phases per task. Quiet supervision kept the same state checks and skipped reading the worker's full log after each phase. These figures have not been rerun for the 0.3 evidence format.
 
 | Output per phase | Verbose → quiet payload tokens, mean | Reduction |
 | --- | ---: | ---: |

@@ -150,6 +150,7 @@ def _result(task_id, run_id, status, reserved, logs=None, exit_code=None,
         "task_status": task_status,
         "reservation_active": bool(reserved),
         "exit_code": exit_code,
+        "exit_code_source": "subprocess_wait" if exit_code is not None else None,
         "logs": logs,
     }
     if error:

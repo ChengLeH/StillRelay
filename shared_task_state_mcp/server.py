@@ -31,7 +31,8 @@ def build_server(config, expected_state_id=None, read_only=False):
             result = await asyncio.to_thread(operation, *args)
         except (state.StateError, OSError, sqlite3.Error, ValueError, TypeError, RecursionError):
             result = {'ok': False, 'error': 'Operation rejected. Check state identity, task ID, revision, '
-                      'lease, resource reservations, input limits and privacy scanner. '
+                      'lease, resource reservations, evidence sources, artifact roots/digests, '
+                      'input limits and privacy scanner. '
                       'If the outcome is unknown, reread and retry only the identical request_id and content.'}
         return CallToolResult(content=[TextContent(type='text', text=json.dumps(result, ensure_ascii=False))],
                               structured_content=result, is_error=not result.get('ok', False))
@@ -74,6 +75,11 @@ def build_server(config, expected_state_id=None, read_only=False):
             requeue also needs resume_evidence. accept needs a different actor and checks containing
             source/diff/tests/runtime evidence. bind needs execution with executor and run_id, plus optional
             status_ref/report_ref. See references/protocol.md for the full contract.
+            Cumulative facts/attempts/artifacts/backups merge instead of replace. New verified_facts
+            require id, statement, method and sources; source-backed reports are not independently verified.
+            finish may include artifact_checks=[{path,sha256}], requiring configured artifact_roots.
+            Legacy artifact strings remain unverified references. retractions preserve original records.
+            exit_code through apply is a worker report; a zero exit is not acceptance.
             MCP does not accept PID binding. A committed receipt is durable even if export fails.
             Retry ambiguous outcomes only with the same request_id and identical original content.
             """
