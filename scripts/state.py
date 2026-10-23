@@ -102,6 +102,28 @@ def delegation_for(task, execution):
     return result
 
 
+def output_fingerprint(task):
+    """Fingerprint only digest-backed outputs observed for the current worker generation."""
+    artifacts = sorted((entry['path'], entry['sha256'], entry['size_bytes'])
+                       for entry in task.get('artifact_evidence', [])
+                       if entry.get('generation') == task.get('generation')
+                       and entry.get('verification') == 'local_sha256_match')
+    if not artifacts:
+        return None
+    payload = {'artifacts': artifacts}
+    return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                                     separators=(',', ':')).encode()).hexdigest()
+
+
+def current_review_result(task, review):
+    worker_result = task.get('worker_result')
+    return (isinstance(review, dict) and isinstance(worker_result, dict)
+            and review.get('worker_generation') == task.get('generation') == worker_result.get('generation')
+            and review.get('worker_revision') == worker_result.get('completed_revision')
+            and review.get('output_fingerprint') == worker_result.get('output_fingerprint')
+            and task.get('result_fingerprint') == worker_result.get('output_fingerprint'))
+
+
 def supervise(store, task_ids, after_seq=0):
     """Read a compact supervision snapshot inside the caller's read transaction."""
     if not isinstance(task_ids, list) or len(task_ids) > 100:
@@ -150,6 +172,7 @@ def supervise(store, task_ids, after_seq=0):
         binding_current = (isinstance(recorded_binding, dict) and
                            recorded_binding.get("worker") == task.get("worker") and
                            recorded_binding.get("generation") == task.get("generation"))
+        review = task.get('review') if isinstance(task.get('review'), dict) else {}
         summaries.append({
             "task_id": task_id,
             "title": task.get("title"),
@@ -165,6 +188,8 @@ def supervise(store, task_ids, after_seq=0):
             "progress": {key: task.get(key) for key in PROGRESS_FIELDS},
             "last_reported_progress_event": latest_progress.get(task_id),
             "review_needed": task.get("status") in {"worker_done", "blocked", "interrupted"},
+            "review_policy": task.get('review_policy', 'legacy'),
+            "review_status": review.get('status', 'not_started'),
         })
     return {"ok": True, "state_id": store.state_id, "after_seq": after_seq,
             "snapshot_seq": snapshot_seq, "tasks": summaries}
@@ -379,6 +404,10 @@ class Store:
     def save(self, task, actor, action):
         task.update(evidence.task_view(task))
         evidence.bounded({k: task[k] for k in EDITABLE | {'artifact_evidence', 'retractions'} if k in task})
+        if isinstance(task.get('review'), dict):
+            evidence.bounded({'review': task['review']})
+        if isinstance(task.get('worker_result'), dict):
+            evidence.bounded({'worker_result': task['worker_result']})
         metadata(actor)
         metadata(action)
         self.protect({"actor": actor, "action": action})
@@ -404,6 +433,34 @@ class Store:
     def owner(self, task, request):
         if task.get("worker") != request.get("actor") or not task.get("lease_id") or task["lease_id"] != request.get("lease_id"):
             raise StateError("worker ownership or generation mismatch")
+
+    def review_owner(self, task, request):
+        review = task.get('review')
+        if (task.get('status') != 'worker_done' or not isinstance(review, dict)
+                or review.get('status') != 'in_progress'
+                or review.get('actor') != request.get('actor')
+                or review.get('lease_id') != request.get('review_lease_id')):
+            raise StateError('review ownership or generation mismatch')
+        if not current_review_result(task, review):
+            raise StateError('review is stale for the current worker result')
+        return review
+
+    def verify_current_outputs(self, task):
+        """Recheck checked artifact bytes at lifecycle boundaries; reports/references are excluded."""
+        expected = output_fingerprint(task)
+        result = task.get('worker_result')
+        if not isinstance(result, dict) or result.get('output_fingerprint') != expected:
+            raise StateError('worker output fingerprint is stale')
+        checks = [{'path': entry['path'], 'sha256': entry['sha256']}
+                  for entry in task.get('artifact_evidence', [])
+                  if entry.get('generation') == task.get('generation')
+                  and entry.get('verification') == 'local_sha256_match']
+        if checks:
+            observed = evidence.inspect_files(checks, self.config.get('artifact_roots', []), task,
+                                              'stillrelay-review-check')
+            if output_fingerprint({**task, 'artifact_evidence': observed}) != expected:
+                raise StateError('worker output fingerprint changed')
+        return expected
 
     def check_resources(self, resources, ignore_task=None):
         if not resources:return
@@ -461,9 +518,9 @@ class Store:
             raise StateError("request exceeds 1 MiB")
         request_id = safe_id(request.get("request_id"))
         actor = safe_id(request.get("actor"))
-        execution = checked_execution(request.get("execution")) if request.get("op") == "bind" else None
+        execution = checked_execution(request.get("execution")) if request.get("op") in {"bind", "review_bind"} else None
         digest = hashlib.sha256(json.dumps(request, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
-        for key in ("request_id", "actor", "task_id", "lease_id", "source_key", "origin", "resources", "execution_pool"):
+        for key in ("request_id", "actor", "task_id", "lease_id", "review_lease_id", "source_key", "origin", "resources", "execution_pool"):
             if key in request:
                 metadata(request[key])
         if 'artifact_checks' in request:
@@ -508,6 +565,7 @@ class Store:
                             "created_by": actor, "created_at": now(), "updated_at": now(),
                             "phase": "prepare", "summary": "", "last_confirmed_step": "", "next_step": "",
                             'execution_pool':None,'resources':[],'read_only':False,'reservation_active':False,
+                            'review_policy':'required',
                             "origin": scrub(origin), **{k: [] for k in LIST_FIELDS}}
                     self.fields(task, request, actor)
                     task.update(self.declaration(request,task))
@@ -596,7 +654,14 @@ class Store:
                                 task["artifacts"] = list(dict.fromkeys(task["artifacts"] + [str(report_path)]))
                                 # Validate the final merged projection before filesystem side effects.
                                 evidence.bounded({k: task[k] for k in EDITABLE | {'artifact_evidence', 'retractions'} if k in task})
-                                write_atomic(report_path, scrub(report))
+                                report_content = scrub(report)
+                                write_atomic(report_path, report_content)
+                            task['result_fingerprint'] = output_fingerprint(task)
+                            task['worker_result'] = {
+                                'generation': task['generation'],
+                                'completed_revision': task['revision'] + 1,
+                                'output_fingerprint': task['result_fingerprint'],
+                            }
                             task.update(status="worker_done" if exit_code == 0 else "blocked", exit_code=exit_code,
                                         outcome_unknown=exit_code != 0)
                         else:
@@ -606,26 +671,180 @@ class Store:
                     save_task = True
                     if task.get("reservation_active"):
                         raise StateError("planning changes require confirmed stop and release first")
+                    if task.get('status') == 'worker_done' and task.get('review_policy', 'legacy') == 'required':
+                        raise StateError('requeue and finish a current generation before changing a review-required result')
                     self.fields(task, request, actor)
                     task.update(self.declaration(request,task))
                 elif op == "requeue":
                     save_task = True
-                    if task["status"] not in {"interrupted", "blocked", "worker_done"}:
+                    if task["status"] not in {"interrupted", "blocked", "worker_done", "needs_revision", "accepted"}:
                         raise StateError("task cannot be requeued from this state")
                     resume_evidence = request.get("resume_evidence")
                     if not isinstance(resume_evidence, str) or not resume_evidence.strip():
                         raise StateError("resume_evidence required; never replay unknown side effects blindly")
                     self.confirm_stopped(task,request)
+                    if task['status'] == 'accepted':
+                        acceptance = task.get('acceptance')
+                        if isinstance(acceptance, dict):
+                            acceptance['superseded_at'] = now()
+                            acceptance['superseded_by_generation'] = task['generation'] + 1
+                        if isinstance(task.get('review'), dict):
+                            task['review']['superseded_by_generation'] = task['generation'] + 1
+                        task['review_policy'] = 'required'
                     task.update(status="queued", resume_evidence=scrub(resume_evidence), worker=None)
+                elif op == 'review_start':
+                    save_task = True
+                    if task.get('status') != 'worker_done' or actor == task.get('worker'):
+                        raise StateError('independent review requires a completed worker result and a different actor')
+                    policy = task.get('review_policy', 'legacy')
+                    if policy not in {'legacy', 'required'}:
+                        raise StateError('invalid review policy')
+                    worker_result = task.get('worker_result')
+                    if not isinstance(worker_result, dict):
+                        # Older task rows have no completion snapshot. Explicit review_start
+                        # binds the currently observed legacy result without rewriting history.
+                        worker_result = {'generation': task['generation'],
+                                         'completed_revision': task['revision'],
+                                         'output_fingerprint': output_fingerprint(task)}
+                        task['result_fingerprint'] = worker_result['output_fingerprint']
+                        task['worker_result'] = worker_result
+                    if worker_result.get('generation') != task['generation']:
+                        raise StateError('worker result is stale; resume and finish a current generation first')
+                    self.verify_current_outputs(task)
+                    previous = task.get('review')
+                    if isinstance(previous, dict) and previous.get('status') == 'in_progress':
+                        raise StateError('review already in progress; confirm stop and use review_resume')
+                    previous = task.get('review')
+                    same_result_review = (isinstance(previous, dict)
+                        and current_review_result(task, previous)
+                        and previous.get('status') in {'passed', 'inconclusive'}
+                        and previous.get('result_task_revision') == task['revision'])
+                    if worker_result.get('completed_revision') != task['revision'] and not same_result_review:
+                        raise StateError('task changed after worker completion; resume and finish a current generation first')
+                    attempt = previous.get('attempt', 0) + 1 if isinstance(previous, dict) else 1
+                    previous_run_ids = list(previous.get('previous_run_ids', [])) if isinstance(previous, dict) else []
+                    previous_execution = previous.get('execution') if isinstance(previous, dict) else None
+                    if isinstance(previous_execution, dict):
+                        previous_run = previous_execution.get('run_id')
+                        if previous_run and previous_run not in previous_run_ids:
+                            previous_run_ids.append(previous_run)
+                    task['review_policy'] = 'required'
+                    task['review'] = {
+                        'id': str(uuid.uuid4()), 'lease_id': str(uuid.uuid4()),
+                        'attempt': attempt, 'status': 'in_progress', 'actor': actor,
+                        'worker_generation': task['generation'],
+                        'worker_revision': worker_result['completed_revision'],
+                        'worker_execution': task.get('delegation', {}).get('run_id'),
+                        'output_fingerprint': worker_result.get('output_fingerprint'),
+                        'checkpoint': '', 'next_step': 'Bind the independent reviewer execution',
+                        'evidence': [], 'previous_run_ids': previous_run_ids, 'started_at': now(),
+                    }
+                elif op == 'review_bind':
+                    save_task = True
+                    review = self.review_owner(task, request)
+                    if review.get('execution') is not None:
+                        if execution != review['execution']:
+                            raise StateError('review is already bound for this lease')
+                        save_task = False
+                    else:
+                        worker_run = task.get('delegation', {}).get('run_id')
+                        if execution['run_id'] == worker_run or execution['run_id'] in review.get('previous_run_ids', []):
+                            raise StateError('review execution must be a distinct run from the worker and prior reviewers')
+                        review['execution'] = execution
+                        review['bound_at'] = now()
+                elif op == 'review_checkpoint':
+                    save_task = True
+                    review = self.review_owner(task, request)
+                    if review.get('execution') is None:
+                        raise StateError('bind the reviewer execution before checkpointing')
+                    checkpoint = request.get('checkpoint')
+                    next_step = request.get('next_step')
+                    items = request.get('evidence', [])
+                    if (not isinstance(checkpoint, str) or not checkpoint.strip() or len(checkpoint) > 4096
+                            or not isinstance(next_step, str) or not next_step.strip() or len(next_step) > 2048
+                            or not isinstance(items, list) or len(items) > 100
+                            or any(not isinstance(item, str) or len(item) > 2048 for item in items)):
+                        raise StateError('review checkpoint, next_step and bounded evidence references required')
+                    review.update(checkpoint=scrub(checkpoint), next_step=scrub(next_step),
+                                  evidence=scrub(items), checkpoint_at=now())
+                elif op == 'review_resume':
+                    save_task = True
+                    review = task.get('review')
+                    if (task.get('status') != 'worker_done' or not isinstance(review, dict)
+                            or review.get('status') != 'in_progress'
+                            or review.get('lease_id') != request.get('review_lease_id')):
+                        raise StateError('no matching interrupted review to resume')
+                    if not current_review_result(task, review):
+                        raise StateError('review is stale for the current worker result')
+                    if actor == task.get('worker'):
+                        raise StateError('reviewer must differ from the worker')
+                    self.verify_current_outputs(task)
+                    stop_evidence = request.get('stop_evidence')
+                    resume_evidence = request.get('resume_evidence')
+                    if (request.get('stop_confirmed') is not True
+                            or not isinstance(stop_evidence, str) or not stop_evidence.strip()
+                            or not isinstance(resume_evidence, str) or not resume_evidence.strip()):
+                        raise StateError('review resume requires stop confirmation, stop evidence and resume evidence')
+                    previous_run = review.get('execution', {}).get('run_id')
+                    previous_ids = list(review.get('previous_run_ids', []))
+                    if previous_run and previous_run not in previous_ids:
+                        previous_ids.append(previous_run)
+                    review.update(actor=actor, lease_id=str(uuid.uuid4()), execution=None,
+                                  attempt=review.get('attempt', 1) + 1,
+                                  status='in_progress', previous_run_ids=previous_ids,
+                                  stop_confirmed=True, stop_evidence=scrub(stop_evidence),
+                                  resume_evidence=scrub(resume_evidence), resumed_at=now(),
+                                  next_step='Bind the resumed reviewer execution')
+                elif op == 'review_result':
+                    save_task = True
+                    review = self.review_owner(task, request)
+                    if review.get('execution') is None:
+                        raise StateError('bind the reviewer execution before recording a result')
+                    self.verify_current_outputs(task)
+                    decision = request.get('decision')
+                    if not isinstance(decision, str) or decision not in {'pass', 'changes_requested', 'inconclusive'}:
+                        raise StateError('review decision must be pass, changes_requested or inconclusive')
+                    checks = request.get('checks', {})
+                    required = {'source', 'diff', 'tests', 'runtime'}
+                    if (not isinstance(checks, dict) or set(checks) != required
+                            or any(not isinstance(value, str) or not value.strip() for value in checks.values())):
+                        raise StateError('source/diff/tests/runtime review evidence required')
+                    review.update(status='passed' if decision == 'pass' else decision,
+                                  result={'decision': decision, 'actor': actor,
+                                          'execution': review['execution'], 'at': now(),
+                                          'checks': scrub(checks)})
+                    review['result_task_revision'] = task['revision'] + 1
+                    if decision == 'changes_requested':
+                        task['status'] = 'needs_revision'
                 elif op == "accept":
                     save_task = True
-                    if task["status"] != "worker_done" or actor == task.get("worker"):
-                        raise StateError("independent controller acceptance required")
-                    checks = request.get("checks", {})
-                    required = {"source", "diff", "tests", "runtime"}
-                    if not isinstance(checks, dict) or set(checks) != required or any(not isinstance(v, str) or not v.strip() for v in checks.values()):
-                        raise StateError("source/diff/tests/runtime evidence required")
-                    task.update(status="accepted", acceptance={"actor": actor, "at": now(), "checks": scrub(checks)})
+                    if task["status"] != "worker_done":
+                        raise StateError("only a completed worker result can be accepted")
+                    if task.get('review_policy', 'legacy') == 'required':
+                        review = task.get('review')
+                        self.verify_current_outputs(task)
+                        if (not isinstance(review, dict) or review.get('status') != 'passed'
+                                or actor == review.get('actor') or not current_review_result(task, review)
+                                or not isinstance(review.get('execution'), dict)
+                                or review.get('result_task_revision') != task['revision']):
+                            raise StateError('current independent review result required; the reviewer cannot accept its own review')
+                        acceptance = {'actor': actor, 'at': now(), 'review': {
+                            'id': review['id'], 'actor': review['actor'],
+                            'execution': review['execution'],
+                            'worker_generation': review['worker_generation'],
+                            'worker_revision': review['worker_revision'],
+                            'output_fingerprint': review['output_fingerprint'],
+                            'checks': review['result']['checks'],
+                        }}
+                    else:
+                        if actor == task.get("worker"):
+                            raise StateError("legacy acceptance requires a different controller")
+                        checks = request.get("checks", {})
+                        required = {"source", "diff", "tests", "runtime"}
+                        if not isinstance(checks, dict) or set(checks) != required or any(not isinstance(v, str) or not v.strip() for v in checks.values()):
+                            raise StateError("source/diff/tests/runtime evidence required")
+                        acceptance = {"actor": actor, "at": now(), "checks": scrub(checks)}
+                    task.update(status="accepted", acceptance=acceptance)
                 else:
                     raise StateError("unknown operation")
                 if save_task:

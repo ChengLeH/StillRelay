@@ -18,12 +18,14 @@ Prefer `scripts/state.py request --stdin` without saving shared raw input. File 
 
 ## Daily workflow
 
+For non-trivial work that may cross turns or need handoff, create one task before starting or continue its existing umbrella task; do not create a task for each tool call. Save each meaningful verified checkpoint with evidence and the next step. New tasks require review. After work finishes, use the host's native capability to start a fresh independent sub-agent, record its run through `review_start` and `review_bind`, and save its checkpoint and result. The worker can accept a passed review. If the client cannot start a native sub-agent, leave the result `worker_done`. StillRelay records the run ID but cannot prove that the context is fresh or authenticated; the host's actual launch supplies that separation. See [the review protocol](references/protocol.md).
+
 1. Read the overview first, then the exact task ID when details are needed. Check generation time, revision, and the last verified step; do not infer identity from similar titles.
 2. Read the goal, constraints, verified facts, failed approaches, next action, and evidence locations. Recheck only drift that matters to the next step, not completed investigations.
 3. Declare `execution_pool` and `resources` when creating or planning work. If precise targets are unknown, reserve `unscoped/write` conservatively. Use `read_only=true` and `resources=[]` only when there are genuinely no write side effects or specific reserved targets.
 4. Claim before executing. Updates require the latest `expected_revision`, the current `lease_id`, and the same `actor`. Reread after conflicts; never force an overwrite. Send heartbeats more frequently than the configured timeout.
 5. After each important verified step, save `last_confirmed_step`, a summary, evidence, and `next_step`. Before an external side effect, record the intended action and how its outcome will be checked. Store compact state, not full conversations, logs, or credentials.
-6. Finish only after work has ended, with the actual `exit_code`. A different controller checks source, changes, tests, and observed behavior before accepting.
+6. Finish only after work has ended, with the actual `exit_code`. Keep the task pending until an independent review has recorded source, diff, tests, and runtime evidence and the result is accepted.
 
 Do not add, remove, or change target declarations during execution. Stop safely and preserve evidence before replanning and claiming a new lease. `local` and `cloud` are unlimited by default; obey any configured capacity. Overlapping writes conflict across pools.
 
@@ -34,6 +36,8 @@ Lost contact does not mean termination. An `interrupted` task may still reserve 
 Release or requeue requires `stop_confirmed=true` and actual `stop_evidence`; requeue also requires `resume_evidence`. A verified live original process causes rejection. If native checks cannot confirm termination, the operator must investigate and explicitly confirm stopping or clearing the reservation. Do not treat a timeout as stop evidence.
 
 Reuse the same task ID in a handoff. State the last verified step, confirmed termination or continuing reservations, unknown side effects, the next action, and evidence locations. An old lease cannot update or release a new worker's reservations.
+
+For an interrupted review, retain its checkpoint and verify that the old reviewer run stopped before `review_resume`; resumption rotates the review lease and requires binding a new run. A timeout or self-reported ID is not stop proof.
 
 See the [protocol](references/protocol.md). This skill supports cooperation on one host within one user's trust boundary. `actor` is not account authentication, resource declarations are not an enforced sandbox, and platform permissions remain unchanged.
 

@@ -271,14 +271,29 @@ async def run_trial(case: str, count: int, trial: int, out: Path, runtime_root: 
                                 "phase": "complete",
                                 "summary": f"Completed {PHASES} phases; output digest={digest}.",
                                 "last_confirmed_step": "All phase outputs matched deterministic expectations.",
-                                "next_step": "ControllerA independently accepts the work.",
+                                "next_step": "ControllerA starts an independent review.",
                             },
                         }})
                         done = finished["receipt"]["task"]
-                        accepted = await controller_call("shared_task_apply", {"request": {
-                            "schema_version": 1, "request_id": f"{task_id}-accept",
-                            "actor": "ControllerA", "op": "accept", "task_id": task_id,
+                        started = await controller_call("shared_task_apply", {"request": {
+                            "schema_version": 1, "request_id": f"{task_id}-review-start",
+                            "actor": "ControllerA", "op": "review_start", "task_id": task_id,
                             "expected_revision": done["revision"],
+                        }})
+                        review = started["receipt"]["task"]
+                        bound, _ = await controller_call("shared_task_apply", {"request": {
+                            "schema_version": 1, "request_id": f"{task_id}-review-bind",
+                            "actor": "ControllerA", "op": "review_bind", "task_id": task_id,
+                            "expected_revision": review["revision"],
+                            "review_lease_id": review["review"]["lease_id"],
+                            "execution": {"executor": "benchmark-fixture", "run_id": f"{task_id}-review-run"},
+                        }})
+                        review = bound["receipt"]["task"]
+                        passed, _ = await controller_call("shared_task_apply", {"request": {
+                            "schema_version": 1, "request_id": f"{task_id}-review-result",
+                            "actor": "ControllerA", "op": "review_result", "task_id": task_id,
+                            "expected_revision": review["revision"],
+                            "review_lease_id": review["review"]["lease_id"], "decision": "pass",
                             "checks": {
                                 "source": "The harness ran the same fixed local Python command in each phase.",
                                 "diff": "Each trial used a fresh disposable state and wrote only benchmark artifacts.",
@@ -286,13 +301,19 @@ async def run_trial(case: str, count: int, trial: int, out: Path, runtime_root: 
                                 "runtime": f"WorkerB finished with exit_code=0 and digest={digest}.",
                             },
                         }})
+                        reviewed = passed["receipt"]["task"]
+                        accepted, _ = await worker_call("shared_task_apply", {"request": {
+                            "schema_version": 1, "request_id": f"{task_id}-accept",
+                            "actor": "WorkerB", "op": "accept", "task_id": task_id,
+                            "expected_revision": reviewed["revision"],
+                        }})
                         if accepted["receipt"]["task"]["status"] != "accepted":
                             raise RuntimeError("ControllerA did not accept the completed task")
 
     expected_controller = ["shared_task_status", "shared_task_apply"] + [
-        "shared_task_supervise"] * PHASES + ["shared_task_apply"]
+        "shared_task_supervise"] * PHASES + ["shared_task_apply"] * 3
     expected_worker = ["shared_task_read", "shared_task_apply", "shared_task_apply"] + [
-        "shared_task_apply"] * PHASES + ["shared_task_apply"]
+        "shared_task_apply"] * PHASES + ["shared_task_apply"] * 2
     if controller_calls != expected_controller or worker_calls != expected_worker:
         raise RuntimeError("MCP call sequence changed unexpectedly")
 

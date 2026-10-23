@@ -167,6 +167,10 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(self.task['blockers'], [])
         self.task = self.apply('finish', exit_code=0, fields={'failed_attempts': [], 'artifacts': []}, report='report')
         artifacts = self.task['artifacts'][:]
+        # A required-review completion is immutable until explicitly reopened.
+        self.task = self.apply('requeue', stop_confirmed=True,
+                               stop_evidence='fixture confirms the finished worker has stopped',
+                               resume_evidence='reopen only to carry cumulative metadata forward')
         self.task = self.apply('plan', fields={'failed_attempts': [], 'artifacts': [], 'backups': []})
         self.assertEqual(self.task['failed_attempts'], ['a', 'b'])
         self.assertEqual(self.task['artifacts'], artifacts)

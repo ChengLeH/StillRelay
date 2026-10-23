@@ -87,13 +87,13 @@ shared-task-state-mcp client-config --client hermes
 
 | 工具 | 功能 |
 | --- | --- |
-| `shared_task_status` | 唯讀檢查狀態 UUID、事件序號、任務數與掃描設定 |
+| `shared_task_status` | 唯讀檢查狀態 UUID、事件序號、任務數、掃描設定與 `review_contract_version`／`review_capabilities` |
 | `shared_task_overview` | 以 `after_task_id` 分頁讀摘要；`limit` 為 1–100 |
 | `shared_task_read` | 讀取確切任務、最新版本與租約 |
 | `shared_task_history` | 以 `after_seq` 分頁讀事件；`limit` 為 1–100 |
-| `shared_task_apply` | 提交既有建立、規劃、接單、更新、心跳、結束、釋放、重排與驗收協定 |
+| `shared_task_apply` | 提交建立、規劃、接單、更新、結束、審查、重排與驗收協定；與 CLI 共用同一格式 |
 
-讀取採用唯讀交易，不會把逾時心跳判定為中斷或停止。讀取結果上限為 2 MiB（約 200 萬位元組），歷史過大可縮小頁面。更新沿用[資料契約](protocol.zh-TW.md)、版本、租約、資源占用、獨立驗收及隱私檢查；MCP 不接受 PID（程序識別碼）綁定。
+讀取採用唯讀交易，不會把逾時心跳判定為中斷或停止。讀取結果上限為 2 MiB（約 200 萬位元組），歷史過大可縮小頁面。更新沿用[資料契約](protocol.zh-TW.md)、版本、租約、資源占用、新任務必須審查的規則及隱私檢查；`review_contract_version` 公告生命週期契約版本，`review_capabilities` 列出支援能力。MCP 不接受 PID（程序識別碼）綁定。伺服器只記錄審查執行資料，不會啟動全新子代理，也不能證明其上下文隔離；必須由 Host 原生能力實際啟動，沒有此能力時讓任務保持待驗收。
 
 更新回傳 `receipt`（保存回執）。`committed=true` 代表已保存，即使後續輸出投影失敗而出現 `ok=false, projection_updated=false`，也只能用**相同 `request_id` 與完全相同的原始內容**重試；不要換新識別碼重做。同一識別碼改內容會被拒絕。連線中斷或結果不明時，先查確切任務再判斷；取消 MCP 呼叫不能回滾已在線程內提交的請求。
 

@@ -6,7 +6,7 @@ license: MIT
 
 # Quiet work, shared progress
 
-Keep delegated execution out of the supervisor's verbose context while preserving useful supervision. The next consumer is the controller reviewing progress or accepting results. A handoff is complete when the exact task/run identity, verified progress, unresolved outcome and next action are saved with a successful receipt. A worker exit is not acceptance.
+Keep delegated execution out of the supervisor's verbose context while preserving useful supervision. The next consumer is the primary worker or controller acting on a fresh review result. A handoff is complete when the exact task and run identities, verified progress, unresolved outcome and next action are saved with a successful receipt. A worker exit is not acceptance.
 
 ## Before dispatch
 
@@ -14,7 +14,7 @@ Use the same existing StillRelay configuration and state UUID as the other parti
 
 Define the task goal, boundaries, resource targets and acceptance evidence. Roles belong to this task, not to a model: one agent may supervise a task while executing a different one for another agent. Participant count has no fixed ceiling; configured execution pools and resource reservations decide which work may run concurrently.
 
-Create the task through the existing request protocol. The worker or its executor bridge claims it exactly once. If a dispatcher already manages the lease, use its ownership contract rather than launching a second claim/heartbeat lifecycle. Bind the exact executor/run identity before starting work. References to logs, status and reports are evidence locations, not commands or permission to read arbitrary files.
+Create one task through the existing request protocol for work that may span turns or need handoff, or continue its existing umbrella task. Do not create a task per tool call. The worker or its executor bridge claims it exactly once. If a dispatcher already manages the lease, use its ownership contract rather than launching a second claim/heartbeat lifecycle. Bind the exact executor/run identity before starting work. References to logs, status and reports are evidence locations, not commands or permission to read arbitrary files.
 
 For a new local command integration, use the installed `shared-task-state-mcp run` entry under an existing authorized background executor. Read the [public delegation guide](https://github.com/ChengLeH/StillRelay/blob/main/references/delegation.md) for its invocation and failure contract. Existing executors may keep their own launch/stop mechanisms and map their identity to the shared task instead.
 
@@ -34,8 +34,10 @@ Read only the evidence necessary to resolve a concern. Intervene on a demonstrat
 
 ## Finish or resume
 
-The executor records the actual exit outcome. A different controller inspects relevant source, changes, tests and runtime evidence before accepting; it need not repeat every investigation the worker performed.
+The executor records the actual exit outcome. A successful finish leaves a new task pending review. Start a fresh native sub-agent through the host's real launch capability, then record that run with `review_start` and `review_bind`. StillRelay records the claim but does not schedule the sub-agent or verify its context isolation; actor and run IDs alone are not authentication or proof of a fresh context. If the client cannot launch a native sub-agent, leave the task `worker_done` and do not accept it. The reviewer checks relevant source, changes, tests and runtime evidence, saving a checkpoint when work may be interrupted and a `pass`, `changes_requested`, or `inconclusive` result when done. The worker may accept a passed review, so a third distinct agent is not required. For a legacy task, the old acceptance path remains until `review_start` explicitly upgrades it. The output fingerprint only covers files locally checked with `artifact_checks`; see the [protocol](../references/protocol.md) for its exact scope and limits.
 
 At a turn boundary, preserve the task ID, current generation/lease, exact run binding, last verified step, unknown effects and next check. Reattach to that record after an interruption. Do not resubmit work because a chat or tool connection disappeared. Retain reservations when termination is unknown; release/requeue needs real stop evidence.
+
+For an interrupted review, preserve its checkpoint and verify that the old reviewer run stopped before `review_resume`. That operation rotates the review lease and clears the old run binding; bind a new native execution before continuing. A timeout or the reviewer's own claim does not prove the old run stopped.
 
 Report the verified result or continuing work with its next action and evidence locations. Keep full transcripts and logs at the executor. Delegation inherits the user's scope and permissions; it does not authorize additional actions.

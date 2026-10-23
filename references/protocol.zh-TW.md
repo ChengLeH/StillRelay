@@ -14,6 +14,8 @@ SQLite（交易式資料庫）保存權威任務與版本歷史。交換目錄�
 
 任務更新以最新 `expected_revision` 防止過期覆寫。`claim` 產生本次 `lease_id` 與執行世代；工作者的 `update`、`heartbeat`、`finish`、`release` 使用同一身分與租約。成功回執中的任務版本是本次提交結果，下一次更新前仍須重讀現況。
 
+新任務預設 `review_policy=required`。沒有 policy 欄位的舊任務保留 `legacy` 相容行為；明確執行 `review_start` 會將舊任務升級為必須獨立驗收，之後舊式 `accept` 不能繞過審查。
+
 | 動作 | 必要內容與行為 |
 | --- | --- |
 | `create` | `fields.title`、`fields.goal`；執行前宣告執行池及目標 |
@@ -21,10 +23,21 @@ SQLite（交易式資料庫）保存權威任務與版本歷史。交換目錄�
 | `claim` | `task_id`、`expected_revision`、工作者 `actor`；一次取得全部宣告目標或全部失敗 |
 | `update` | 任務 ID、版本、本次租約、`fields`；保存實際驗證結果 |
 | `heartbeat` | 任務 ID、版本、本次租約；更新存活訊號，亦可能增加版本 |
-| `finish` | 任務 ID、版本、本次租約、整數 `exit_code`；0 表示工作者結束待驗收，非 0 表示失敗／阻礙 |
+| `finish` | 任務 ID、版本、本次租約、整數 `exit_code`；0 表示工作者完成、等待審查與驗收，非 0 表示失敗／阻礙 |
 | `release` | 任務 ID、版本、本次租約、`stop_confirmed=true`、非空 `stop_evidence`；原程序仍存活則拒絕 |
 | `requeue` | 任務 ID、版本、`stop_confirmed=true`、非空 `stop_evidence` 及 `resume_evidence`；查證副作用後才重新排隊 |
-| `accept` | 不同於工作者的控制者；`checks` 的 `source`、`diff`、`tests`、`runtime` 四鍵均須實際證據文字 |
+| `review_start` | 不同於工作者的審查者；快照本次完成世代、版本與成果指紋 |
+| `review_bind` | 本次審查租約及 `execution={executor,run_id}`；執行 ID 須不同於工作者及先前審查執行 |
+| `review_checkpoint` | 目前審查租約、已綁定的執行、已確認進度、下一步與有界證據參照 |
+| `review_resume` | 目前審查租約、已確認停止的證據及續接證據；輪替租約、保留檢查點並綁定新執行 |
+| `review_result` | 目前審查租約與執行；以 `pass`、`changes_requested` 或 `inconclusive` 記錄結果及 source/diff/tests/runtime 證據 |
+| `accept` | 新任務須消費目前世代的 `passed` 審查結果；工作者可接受，但審查者不能驗收自己的結果。舊任務在 `review_start` 升級前，仍要求不同於工作者的 actor 與舊式證據欄位 |
+
+StillRelay 只記錄審查者與執行 ID，不會啟動子代理，也不會認證執行或上下文隔離。Host 必須透過原生能力實際啟動全新的子代理審查；actor 與執行 ID 都是自我申報資料，不能證明程序獨立、上下文全新或身分已認證。用戶端無法啟動原生子代理時，任務留在 `worker_done`，不要記錄假審查或驗收。
+
+成果指紋只涵蓋本工作者世代中，透過 `artifact_checks` 在本機核對過位元組的檔案，包含已核對路徑、SHA-256 與大小；核心會在開始／續接審查、提交審查結果及驗收時重新讀檔核對。報告與一般 artifact 參照不在範圍內；沒有已核對檔案時指紋為 `null`。重新核對能發現這些時間點的檔案變動，但不會鎖住檔案，也不能保證外部內容之後不再改變。成果變動時，審查或驗收會被拒絕，直到工作者產生並完成新世代。
+
+可能跨回合或需要交接的非瑣碎工作，開始前建立一筆持久任務，或沿用既有總任務；每個有意義的確認檢查點保存進度與下一步，不要每次工具呼叫都建立新任務。中斷前保存任務 ID、世代、目前租約、執行身分、停止狀況、未知副作用與下一步。CLI `request --stdin` 與 MCP `shared_task_apply` 共用這套協定。Host 如何實際啟動全新審查見[靜默委派](delegation.zh-TW.md)。
 
 常用進度欄位：`title`、`goal`、`phase`、`summary`、`last_confirmed_step`、`next_step` 為文字；`constraints`、`failed_attempts`、`artifacts`、`backups`、`blockers` 為文字陣列。新的 `verified_facts` 使用含 id／statement／method／sources 的來源物件。事實、失敗方法、產物參照與備份在 update／finish／plan 累積合併；限制與阻礙仍可整體更新。撤回累積項目需明確留下 retractions。證據記位置，不複製機密內容。檔案檢查、舊事實分類、容量限制與退出碼信任範圍見 [0.3 證據格式與升級說明](evidence.zh-TW.md)。
 
@@ -60,7 +73,7 @@ SQLite（交易式資料庫）保存權威任務與版本歷史。交換目錄�
 
 心跳過期不自動釋放目標。`interrupted` 仍保留 `reservation_active`；未知副作用以 `outcome_unknown` 記錄。再次接手前確認停止並查證副作用。無法原生判斷時，要求操作者明確確認，不把缺少 PID 或工具無法讀取程序資訊視為已停止。
 
-停止證據應涵蓋本次代理及其啟動的子工作者，說明修改工作已停止的查核方式、結果，以及需人工解除的理由。`resume_evidence` 另說明外部動作是否已生效及安全續接點。成功 `finish` 不等於驗收通過；程式檢查驗收欄位結構，不替代控制者實際檢查。
+停止證據應涵蓋本次代理及其啟動的子工作者，說明修改工作已停止的查核方式、結果，以及需人工解除的理由。`resume_evidence` 另說明外部動作是否已生效及安全續接點。成功 `finish` 不等於驗收通過；保存的審查結果也不取代主要 agent 對證據的判斷。
 
 ## 純檔案入口
 

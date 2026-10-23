@@ -14,6 +14,8 @@ Use a new `request_id` for each new action. Replaying the same ID with the same 
 
 Updates use the latest `expected_revision` to reject stale writes. Claim creates the current `lease_id` and execution generation. Worker update, heartbeat, finish, and release use the same identity and lease. A successful receipt reflects that transaction's revision; reread current state before the next update.
 
+New tasks default to `review_policy=required`. Existing task rows without a policy remain `legacy` for compatibility. An explicit `review_start` upgrades a legacy task to required review; old acceptance cannot bypass a review after that point.
+
 | Operation | Required content and behavior |
 | --- | --- |
 | `create` | `fields.title` and `fields.goal`; declare the pool and targets before execution |
@@ -21,10 +23,21 @@ Updates use the latest `expected_revision` to reject stale writes. Claim creates
 | `claim` | `task_id`, `expected_revision`, worker `actor`; acquire all declared targets or none |
 | `update` | Task ID, revision, current lease, `fields`; save actual verified results |
 | `heartbeat` | Task ID, revision, current lease; refresh liveness information and potentially increase revision |
-| `finish` | Task ID, revision, current lease, integer `exit_code`; 0 means worker completion awaiting acceptance, otherwise failure or blockage |
+| `finish` | Task ID, revision, current lease, integer `exit_code`; 0 means worker completion awaiting review and acceptance, otherwise failure or blockage |
 | `release` | Task ID, revision, current lease, `stop_confirmed=true`, nonempty `stop_evidence`; reject a verified live original process |
 | `requeue` | Task ID, revision, `stop_confirmed=true`, nonempty `stop_evidence` and `resume_evidence`; check side effects before queueing again |
-| `accept` | A controller different from the worker; `checks.source`, `checks.diff`, `checks.tests`, and `checks.runtime` must each contain actual evidence text |
+| `review_start` | A reviewer different from the worker; snapshot the completed generation, revision, and output fingerprint |
+| `review_bind` | Current review lease plus `execution={executor,run_id}`; the run ID must differ from the worker and prior review runs |
+| `review_checkpoint` | Current review lease, bound execution, a verified checkpoint, next step, and bounded evidence references |
+| `review_resume` | Current review lease, confirmed stop evidence, and resume evidence; rotate the lease, preserve the checkpoint, and bind a new execution |
+| `review_result` | Current review lease and bound execution; choose `pass`, `changes_requested`, or `inconclusive`, with source/diff/tests/runtime evidence |
+| `accept` | For required tasks, consume a current `passed` review; the worker may accept it, and the reviewer may not accept their own result. Legacy tasks require the old different-actor and evidence checks until `review_start` upgrades them |
+
+StillRelay records reviewer and execution IDs but does not launch sub-agents or authenticate a run. The host must actually start a fresh native sub-agent for review. IDs and actor labels are submitted metadata; they cannot prove a separate process, fresh context, or authenticated reviewer. If a client cannot start a native sub-agent, leave the task `worker_done` instead of recording a pretend review or accepting it.
+
+The output fingerprint covers only files whose bytes were locally verified by `artifact_checks` on the current worker generation. It binds the verified path, SHA-256, and size, and the core rechecks those files at review start/resume/result and accept. Reports and artifact references alone are excluded; without checked files the fingerprint is `null`. Rechecking detects changes at those lifecycle points, but does not lock files or guarantee that external content will remain unchanged afterward. A changed artifact blocks review or acceptance until the worker produces and finishes a current generation.
+
+For non-trivial work that may span turns or require handoff, create one durable task before work begins, or reuse its existing umbrella task. Save confirmed progress and the next step after meaningful checkpoints; do not create a task per tool call. Before interruption, preserve the task ID, generation, current lease, execution identity, confirmed stop state, unknown effects, and next action. CLI `request --stdin` and MCP `shared_task_apply` use this same protocol. See [silent delegation](delegation.md) for the host-side fresh-review lifecycle.
 
 Common progress fields `title`, `goal`, `phase`, `summary`, `last_confirmed_step`, and `next_step` are strings. `constraints`, `failed_attempts`, `artifacts`, `backups`, and `blockers` are arrays of strings. New `verified_facts` are source-backed objects with id/statement/method/sources. Facts, failed attempts, artifact references and backups accumulate across update/finish/plan; constraints and blockers remain replaceable. Use explicit retractions to withdraw accumulated entries. Record evidence locations rather than secret contents. See the [0.3 evidence contract and upgrade notes](evidence.md) for local artifact checks, legacy fact classification, limits and exit-code trust.
 
@@ -60,7 +73,7 @@ Paths are revalidated at admission. Do not add or remove targets during executio
 
 Heartbeat expiry does not automatically release targets. Interrupted tasks retain `reservation_active`; unknown side effects are marked by `outcome_unknown`. Confirm stopping and inspect side effects before handing work over. If native checks cannot establish termination, require explicit operator confirmation. Missing PIDs or unavailable process inspection do not prove stopping.
 
-Stop evidence must cover the current agent and child workers it started, stating how cessation of modifying work was checked, the result, and any reason for manual clearing. Resume evidence additionally explains whether external actions took effect and where work can safely continue. Successful finish is not acceptance; structural evidence validation does not replace a controller's checks.
+Stop evidence must cover the current agent and child workers it started, stating how cessation of modifying work was checked, the result, and any reason for manual clearing. Resume evidence additionally explains whether external actions took effect and where work can safely continue. Successful finish is not acceptance; a recorded review result does not replace the primary agent's judgment about the evidence.
 
 ## File-only channel
 

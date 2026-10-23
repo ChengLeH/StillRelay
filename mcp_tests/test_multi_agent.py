@@ -98,11 +98,22 @@ class MultiAgentWireTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(outputs[index], str(index * index))
                     task = await apply(worker, 'finish', tasks[index], exit_code=0)
                     self.assertEqual(task['status'], 'worker_done')
-                    task = await apply(controller, 'accept', task, checks={
-                        'source': 'Fixture task and run identity checked',
-                        'diff': 'No source mutation; read-only fixture',
-                        'tests': f'Independent arithmetic result checked: {index * index}',
-                        'runtime': 'Worker completion receipt checked'})
+                    reviewer = (controller + 1) % participants
+                    if reviewer == worker:
+                        reviewer = (reviewer + 1) % participants
+                    task = await apply(reviewer, 'review_start', task)
+                    task = await apply(reviewer, 'review_bind', task,
+                        review_lease_id=task['review']['lease_id'],
+                        execution={'executor': 'fixture-native-review',
+                                   'run_id': f'review-{index}-{reviewer}'})
+                    task = await apply(reviewer, 'review_result', task,
+                        review_lease_id=task['review']['lease_id'], decision='pass',
+                        checks={
+                            'source': 'Fixture task and run identity checked',
+                            'diff': 'No source mutation; read-only fixture',
+                            'tests': f'Independent arithmetic result checked: {index * index}',
+                            'runtime': 'Worker completion receipt checked'})
+                    task = await apply(controller, 'accept', task)
                     self.assertEqual(task['status'], 'accepted')
                     history = await call(controller, 'shared_task_history', {
                         'task_id': task['task_id'], 'after_seq': 0, 'limit': 100})

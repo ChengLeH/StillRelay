@@ -6,7 +6,7 @@
 
 **Little agents. Shared progress.**
 
-One finds the clue. One builds the fix. One checks the work. Let each do its thing—without passing the entire transcript around.
+Agents share confirmed progress and hand off work without passing the entire transcript around. A fresh reviewer checks completed work before acceptance; the same primary worker can accept the review result.
 
 StillRelay gives cooperating agents one durable place for tasks, progress and evidence. Workers run quietly. Delegators check in at intervals, inspect what changed, and step in when needed. A new chat can pick up the same task instead of starting the story again.
 
@@ -15,7 +15,7 @@ StillRelay gives cooperating agents one durable place for tasks, progress and ev
 - **Quiet work, visible progress.** Keep verbose logs with the executor. Share confirmed steps, blockers and the next action.
 - **Roles travel with tasks.** A can delegate to B while working on a different task from B.
 - **Bring your own crew.** Configure execution-pool capacity for your hardware. Conflicting writes still wait their turn.
-- **Done is not accepted.** A worker hands over evidence; another controller checks it.
+- **Done waits for review.** New work stays pending until a separate reviewer records a result.
 
 [Connect through MCP](references/mcp.md) · [Silent delegation guide](references/delegation.md) · [Optional delegation Skill](skills/silent-delegation/SKILL.md)
 

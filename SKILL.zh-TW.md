@@ -18,12 +18,14 @@ description: Maintain one shared task record, reserve declared resources, and re
 
 ## 日常流程
 
+可能跨回合或需要交接的非瑣碎工作，開始前建立一筆任務，或沿用既有總任務；不要每次工具呼叫都建立新任務。每個有意義的確認檢查點保存證據與下一步。新任務必須獨立審查。工作結束後，透過 Host 原生能力實際啟動全新子代理，再以 `review_start`、`review_bind` 記錄其執行，並保存檢查點與結果。工作者可以接受通過的審查。用戶端無法啟動原生子代理時，讓結果保持 `worker_done`。StillRelay 只記錄執行 ID，無法證明上下文全新或身分已認證；只有 Host 實際啟動才能建立獨立執行。詳見[審查協定](references/protocol.zh-TW.md)。
+
 1. 先讀總覽，需要詳細判斷才讀確切任務 ID。確認產生時間、版本與最後確認步驟；不要從近似標題猜身分。
 2. 讀目標、限制、已驗證事實、失敗方法、下一步與證據位置。只重查影響下一步的漂移，不重做已完成調查。
 3. 建立或規劃任務時宣告 `execution_pool` 與 `resources`。無法精確宣告時使用 `unscoped/write` 保守占用；確實沒有寫入副作用且不占用特定目標時可宣告 `read_only=true`、`resources=[]`。
 4. 執行前 `claim`。後續更新使用最新 `expected_revision`、本次 `lease_id` 與相同 `actor`。衝突先重讀；不能強制覆蓋。心跳間隔須小於共用設定的逾時值。
 5. 每個重要步驟驗證完成後，更新 `last_confirmed_step`、摘要、證據與 `next_step`。開始外部副作用前記錄動作及查證方式；只保存精簡狀態，不複製完整對話、日誌或憑證。
-6. 工作確實結束才 `finish`，填實際 `exit_code`。由另一位控制者檢查來源、差異、測試及實際結果，再 `accept`。
+6. 工作確實結束才 `finish`，填實際 `exit_code`。來源、差異、測試與實際結果都由獨立審查記錄後，任務才可接受。
 
 執行中不能增減或改寫目標宣告。需要新增目標時，先安全停止並保留證據，再重新規劃及取得新租約。`local`、`cloud` 預設均不限數量；若管理者另設容量，遵循實際設定。同目標寫入互斥不受執行池影響。
 
@@ -34,6 +36,8 @@ description: Maintain one shared task record, reserve declared resources, and re
 `release` 或 `requeue` 都要提供 `stop_confirmed=true` 與實際 `stop_evidence`，`requeue` 另需 `resume_evidence`。原程序仍存活時會拒絕。原生工具不能確認停止時，由操作者查證並明確確認停止或解除；不要把逾時當停止證據。
 
 交接沿用同一任務 ID，說明最後確認步驟、已確認停止或仍占用的狀態、未知副作用、下一步與證據。舊租約不能更新或釋放新工作者的占用。
+
+審查中斷時保留檢查點，先確認舊審查執行已停止，再呼叫 `review_resume`；它會輪替審查租約，並要求綁定新執行。逾時或自我申報 ID 都不是停止證據。
 
 格式見 [資料契約](references/protocol.zh-TW.md)。本技能只適用於同一主機、同一使用者信任範圍內合作；`actor` 不是帳號認證，資源宣告不是強制沙箱，各平台權限維持原樣。
 
