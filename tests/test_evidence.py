@@ -90,7 +90,7 @@ class EvidenceTests(unittest.TestCase):
             result = original_stat(path, *args, **kwargs)
             if path == target:
                 return SimpleNamespace(
-                    st_dev=result.st_dev, st_ino=result.st_ino, st_size=result.st_size,
+                    st_mode=result.st_mode, st_dev=result.st_dev, st_ino=result.st_ino, st_size=result.st_size,
                     st_mtime_ns=result.st_mtime_ns, st_ctime_ns=result.st_ctime_ns + 1)
             return result
 
