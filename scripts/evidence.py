@@ -133,7 +133,9 @@ def inspect_files(checks, roots, task, actor):
                 after = os.fstat(stream.fileno())
                 current = path.stat()
                 identity = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns)
-                if identity(before) != identity(after) or identity(after) != identity(current) or size != after.st_size:
+                path_identity = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns)
+                if (identity(before) != identity(after) or path_identity(after) != path_identity(current)
+                        or size != after.st_size):
                     raise StateError('artifact changed during verification')
                 if raw.resolve(strict=True) != path or any(part.is_symlink() for part in (raw, *raw.parents)):
                     raise StateError('artifact path changed during verification')

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 import uuid
 from unittest import mock
@@ -80,6 +81,25 @@ class EvidenceTests(unittest.TestCase):
         Path(check['path']).unlink()
         self.assertEqual(self.store.apply(request), result)
 
+    def test_path_and_open_file_ctime_differences_do_not_reject_matching_artifact(self):
+        check = self.file_check()
+        original_stat = Path.stat
+        target = Path(check['path'])
+
+        def path_stat_with_different_ctime(path, *args, **kwargs):
+            result = original_stat(path, *args, **kwargs)
+            if path == target:
+                return SimpleNamespace(
+                    st_dev=result.st_dev, st_ino=result.st_ino, st_size=result.st_size,
+                    st_mtime_ns=result.st_mtime_ns, st_ctime_ns=result.st_ctime_ns + 1)
+            return result
+
+        with mock.patch.object(Path, 'stat', new=path_stat_with_different_ctime):
+            result = state.evidence.inspect_files(
+                [check], self.config['artifact_roots'], self.task, 'worker')
+
+        self.assertEqual(result[0]['sha256'], check['sha256'])
+
     def test_file_access_requires_opt_in_roots_and_regular_file(self):
         check = self.file_check()
         for root in ([], [str(self.base / 'other')]):
@@ -117,12 +137,14 @@ class EvidenceTests(unittest.TestCase):
     def test_changed_or_oversized_files_reject(self):
         check = self.file_check()
         original_sha = hashlib.sha256
+        replacement = b'content changed to a different length'
+
         def changing_digest():
             inner = original_sha()
             class Digest:
                 def update(self, chunk):
                     inner.update(chunk)
-                    Path(check['path']).write_bytes(b'changed')
+                    Path(check['path']).write_bytes(replacement)
                 def hexdigest(self):
                     return inner.hexdigest()
             return Digest()
@@ -130,6 +152,7 @@ class EvidenceTests(unittest.TestCase):
         with mock.patch.object(state.evidence.hashlib, 'sha256', side_effect=changing_digest):
             with self.assertRaises(state.StateError):
                 state.evidence.inspect_files([check], self.config['artifact_roots'], self.task, 'worker')
+        self.assertEqual(Path(check['path']).read_bytes(), replacement)
         with open(check['path'], 'wb') as stream:
             stream.truncate(state.evidence.MAX_BYTES + 1)
         with self.assertRaises(state.StateError):
