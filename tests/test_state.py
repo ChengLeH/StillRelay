@@ -1,4 +1,5 @@
 import concurrent.futures
+import hashlib
 import importlib.util
 import json
 import os
@@ -54,6 +55,21 @@ class StateTests(unittest.TestCase):
 
     def claim(self, task, actor="worker-a", **kwargs):
         return self.store.apply(self.request("claim", actor, task, **kwargs))["task"]
+
+    def bind(self, task, actor="worker-a", run_id=None):
+        return self.store.apply(self.request("bind", actor, task,
+            execution={"executor": "native", "run_id": run_id or "worker-" + str(uuid.uuid4())}))["task"]
+
+    def start_review(self, task, actor="reviewer-a"):
+        return self.store.apply(self.request("review_start", actor, task))["task"]
+
+    def bind_review(self, task, actor="reviewer-a", run_id=None):
+        return self.store.apply(self.request("review_bind", actor, task,
+            review_lease_id=task["review"]["lease_id"],
+            execution={"executor": "native", "run_id": run_id or "review-" + str(uuid.uuid4())}))["task"]
+
+    def review_checks(self):
+        return {key: "獨立檢查已完成" for key in ("source", "diff", "tests", "runtime")}
 
     def test_resume_last_confirmed_and_cross_agent(self):
         t = self.claim(self.create())
@@ -147,12 +163,175 @@ class StateTests(unittest.TestCase):
 
     def test_acceptance_requires_independent_evidence(self):
         t = self.claim(self.create())
+        t = self.bind(t)
         t = self.store.apply(self.request("finish", task=t, exit_code=0))["task"]
         checks = {k: "已檢查證據" for k in ["source", "diff", "tests", "runtime"]}
         with self.assertRaisesRegex(state.StateError, "independent"):
             self.store.apply(self.request("accept", task=t, checks=checks))
-        t = self.store.apply(self.request("accept", "controller", t, checks=checks))["task"]
+        t = self.start_review(t)
+        t = self.bind_review(t)
+        t = self.store.apply(self.request("review_result", "reviewer-a", t,
+            review_lease_id=t["review"]["lease_id"], decision="pass", checks=checks))["task"]
+        t = self.store.apply(self.request("accept", "controller", t))["task"]
         self.assertEqual(t["status"], "accepted")
+        self.assertEqual(t["acceptance"]["review"]["worker_generation"], t["generation"])
+
+    def test_worker_can_accept_a_pass_from_a_distinct_review_run(self):
+        t = self.bind(self.claim(self.create()), actor='worker-a', run_id='main-run')
+        t = self.store.apply(self.request('finish', 'worker-a', t, exit_code=0))['task']
+        t = self.bind_review(self.start_review(t, actor='reviewer-a'),
+                             actor='reviewer-a', run_id='fresh-review-run')
+        t = self.store.apply(self.request('review_result', 'reviewer-a', t,
+            review_lease_id=t['review']['lease_id'], decision='pass',
+            checks=self.review_checks()))['task']
+        t = self.store.apply(self.request('accept', 'worker-a', t))['task']
+        self.assertEqual(t['status'], 'accepted')
+        self.assertEqual(t['acceptance']['review']['actor'], 'reviewer-a')
+
+    def test_required_review_is_default_and_binds_worker_result(self):
+        t = self.create()
+        self.assertEqual(t["review_policy"], "required")
+        artifact_root = Path(self.temp.name).resolve()
+        self.config['artifact_roots'] = [str(artifact_root)]
+        t = self.bind(self.claim(t), run_id="worker-run-1")
+        output = artifact_root / "result.txt"
+        output.write_text("finished output", encoding="utf-8")
+        fingerprint = hashlib.sha256(output.read_bytes()).hexdigest()
+        t = self.store.apply(self.request("finish", task=t, exit_code=0,
+            artifact_checks=[{"path": str(output), "sha256": fingerprint}]))["task"]
+        worker_revision = t["revision"]
+        review = self.start_review(t)
+        self.assertEqual(review["review"]["worker_generation"], t["generation"])
+        self.assertEqual(review["review"]["worker_revision"], worker_revision)
+        self.assertEqual(review["review"]["output_fingerprint"], t["result_fingerprint"])
+
+    def test_changed_checked_artifact_blocks_review_and_accept(self):
+        artifact_root = Path(self.temp.name).resolve()
+        self.config['artifact_roots'] = [str(artifact_root)]
+        output = artifact_root / 'reviewed-output.txt'
+        output.write_text('reviewed bytes', encoding='utf-8')
+        check = {'path': str(output), 'sha256': hashlib.sha256(output.read_bytes()).hexdigest()}
+        t = self.bind(self.claim(self.create()), run_id='worker-artifact-run')
+        t = self.store.apply(self.request('finish', task=t, exit_code=0,
+            artifact_checks=[check]))['task']
+
+        output.write_text('changed before review', encoding='utf-8')
+        with self.assertRaisesRegex(state.StateError, 'SHA-256 mismatch'):
+            self.start_review(t)
+
+        output.write_text('reviewed bytes', encoding='utf-8')
+        t = self.start_review(t)
+        t = self.bind_review(t, run_id='review-artifact-run')
+        t = self.store.apply(self.request('review_result', 'reviewer-a', t,
+            review_lease_id=t['review']['lease_id'], decision='pass',
+            checks=self.review_checks()))['task']
+        output.write_text('changed after review', encoding='utf-8')
+        with self.assertRaisesRegex(state.StateError, 'SHA-256 mismatch'):
+            self.store.apply(self.request('accept', 'controller', t))
+
+    def test_review_requires_distinct_bound_execution_and_cas(self):
+        t = self.bind(self.claim(self.create()), run_id="same-run")
+        t = self.store.apply(self.request("finish", task=t, exit_code=0))["task"]
+        t = self.start_review(t)
+        with self.assertRaisesRegex(state.StateError, "execution"):
+            self.bind_review(t, run_id="same-run")
+        t = self.bind_review(t, run_id="review-run")
+        stale = self.request("review_checkpoint", "reviewer-a", t,
+            review_lease_id=t["review"]["lease_id"], checkpoint="已檢查來源", next_step="檢查測試")
+        t = self.store.apply(stale)["task"]
+        stale["request_id"] = str(uuid.uuid4())
+        with self.assertRaisesRegex(state.StateError, "revision conflict"):
+            self.store.apply(stale)
+        with self.assertRaisesRegex(state.StateError, "in progress"):
+            self.start_review(t, actor="reviewer-b")
+
+    def test_review_resume_rotates_lease_and_rejects_old_reviewer(self):
+        t = self.bind(self.claim(self.create()), run_id="worker-run")
+        t = self.store.apply(self.request("finish", task=t, exit_code=0))["task"]
+        t = self.bind_review(self.start_review(t), run_id="review-run-a")
+        old_lease = t["review"]["lease_id"]
+        t = self.store.apply(self.request("review_checkpoint", "reviewer-a", t,
+            review_lease_id=old_lease, checkpoint="已讀變更", next_step="跑測試"))["task"]
+        t = self.store.apply(self.request("review_resume", "reviewer-b", t,
+            review_lease_id=old_lease, stop_confirmed=True,
+            stop_evidence="executor 查證原 reviewer run 已終止",
+            resume_evidence="由新 reviewer 從已保存的 checkpoint 接續"))["task"]
+        self.assertNotEqual(t["review"]["lease_id"], old_lease)
+        self.assertEqual(t["review"]["checkpoint"], "已讀變更")
+        stale = self.request("review_checkpoint", "reviewer-a", t,
+            review_lease_id=old_lease, checkpoint="覆寫舊版本", next_step="錯誤")
+        with self.assertRaisesRegex(state.StateError, "review ownership"):
+            self.store.apply(stale)
+        t = self.bind_review(t, actor="reviewer-b", run_id="review-run-b")
+        t = self.store.apply(self.request("review_result", "reviewer-b", t,
+            review_lease_id=t["review"]["lease_id"], decision="changes_requested",
+            checks=self.review_checks()))["task"]
+        self.assertEqual(t["status"], "needs_revision")
+        with self.assertRaisesRegex(state.StateError, "completed worker result"):
+            self.store.apply(self.request("accept", "controller", t))
+
+    def test_reopening_accepted_task_invalidates_prior_review(self):
+        t = self.bind(self.claim(self.create()), run_id="worker-v1")
+        t = self.store.apply(self.request("finish", task=t, exit_code=0))["task"]
+        t = self.bind_review(self.start_review(t), run_id="review-v1")
+        t = self.store.apply(self.request("review_result", "reviewer-a", t,
+            review_lease_id=t["review"]["lease_id"], decision="pass", checks=self.review_checks()))["task"]
+        t = self.store.apply(self.request("accept", "controller", t))["task"]
+        old_review = t["review"]
+        t = self.store.apply(self.request("requeue", "controller", t,
+            resume_evidence="已重開並準備新一輪實作"))["task"]
+        self.assertEqual(t["review_policy"], "required")
+        t = self.bind(self.claim(t, "worker-b"), actor="worker-b", run_id="worker-v2")
+        t = self.store.apply(self.request("finish", "worker-b", t, exit_code=0))["task"]
+        with self.assertRaisesRegex(state.StateError, "review"):
+            self.store.apply(self.request("accept", "controller", t))
+        t = self.start_review(t, actor='reviewer-b')
+        with self.assertRaisesRegex(state.StateError, 'distinct run'):
+            self.bind_review(t, actor='reviewer-b', run_id='review-v1')
+        t = self.bind_review(t, actor='reviewer-b', run_id='review-v2')
+        t = self.store.apply(self.request('review_result', 'reviewer-b', t,
+            review_lease_id=t['review']['lease_id'], decision='pass',
+            checks=self.review_checks()))['task']
+        t = self.store.apply(self.request('accept', 'worker-b', t))['task']
+        self.assertEqual(t['status'], 'accepted')
+        self.assertNotEqual(t["generation"], old_review["worker_generation"])
+
+    def test_required_completed_task_cannot_be_changed_after_review_result(self):
+        t = self.bind(self.claim(self.create()), run_id="worker-run")
+        t = self.store.apply(self.request("finish", task=t, exit_code=0))["task"]
+        t = self.bind_review(self.start_review(t), run_id="review-run")
+        t = self.store.apply(self.request("review_result", "reviewer-a", t,
+            review_lease_id=t["review"]["lease_id"], decision="pass", checks=self.review_checks()))["task"]
+        with self.assertRaisesRegex(state.StateError, "requeue and finish"):
+            self.store.apply(self.request("plan", "controller", t,
+                fields={"summary": "new scope after review"}))
+
+    def test_legacy_task_keeps_accept_compatibility_but_review_start_upgrades_it(self):
+        t = self.create()
+        with self.store.transaction():
+            row = self.store.db.execute("SELECT data FROM tasks WHERE id=?", (t["task_id"],)).fetchone()
+            legacy = json.loads(row[0])
+            legacy.pop("review_policy", None)
+            self.store.db.execute("UPDATE tasks SET data=? WHERE id=?",
+                (json.dumps(legacy, ensure_ascii=False), t["task_id"]))
+        t = self.claim(self.store.get(t["task_id"]))
+        t = self.store.apply(self.request("finish", task=t, exit_code=0))["task"]
+        t = self.store.apply(self.request("accept", "controller", t, checks=self.review_checks()))["task"]
+        self.assertEqual(t["status"], "accepted")
+
+        legacy2 = self.create()
+        with self.store.transaction():
+            row = self.store.db.execute("SELECT data FROM tasks WHERE id=?", (legacy2["task_id"],)).fetchone()
+            data = json.loads(row[0])
+            data.pop("review_policy", None)
+            self.store.db.execute("UPDATE tasks SET data=? WHERE id=?",
+                (json.dumps(data, ensure_ascii=False), legacy2["task_id"]))
+        legacy2 = self.bind(self.claim(self.store.get(legacy2["task_id"])), run_id="legacy-worker")
+        legacy2 = self.store.apply(self.request("finish", task=legacy2, exit_code=0))["task"]
+        legacy2 = self.start_review(legacy2)
+        self.assertEqual(legacy2["review_policy"], "required")
+        with self.assertRaisesRegex(state.StateError, "review"):
+            self.store.apply(self.request("accept", "controller", legacy2, checks=self.review_checks()))
 
     def test_secrets_scrubbed_and_paths_cannot_escape(self):
         t = self.store.apply(self.request("create", fields={"title": "secret", "goal": "Bearer abcdefghijklmnop"}))["task"]
@@ -277,8 +456,8 @@ class StateTests(unittest.TestCase):
         with self.assertRaisesRegex(state.StateError,'resource conflict'):
             self.claim(self.create(execution_pool='cloud',resources=r))
         t=self.store.apply(self.request('finish',task=t,exit_code=0))['task']
-        t=self.store.apply(self.request('plan','muse',t,resources=[{'kind':'service','name':'service:other','mode':'write'}]))['task']
         t=self.store.apply(self.request('requeue','muse',t,resume_evidence='已確認上一工作者停止'))['task']
+        t=self.store.apply(self.request('plan','muse',t,resources=[{'kind':'service','name':'service:other','mode':'write'}]))['task']
         self.claim(t)
         self.claim(self.create(execution_pool='cloud',resources=r))
 

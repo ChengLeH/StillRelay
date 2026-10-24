@@ -85,14 +85,14 @@ This uses the shared platform-default config or `SHARED_TASK_STATE_CONFIG`. Appe
 
 | Tool | Effect |
 | --- | --- |
-| `shared_task_status` | State UUID, event sequence, task count and scanner availability; read-only |
+| `shared_task_status` | State UUID, event sequence, task count, scanner availability, and `review_contract_version`/`review_capabilities`; read-only |
 | `shared_task_overview` | Task summaries, paged by `after_task_id`, `limit` 1–100 |
 | `shared_task_read` | Exact task ID, latest revision and lease |
 | `shared_task_history` | Events paged by `after_seq`, `limit` 1–100 |
 | `shared_task_supervise` | Read a compact, consistent snapshot of selected tasks and distinguish heartbeat contact from reported progress |
-| `shared_task_apply` | Existing create/plan/claim/update/heartbeat/finish/release/requeue/accept protocol |
+| `shared_task_apply` | Shared create/plan/claim/update/finish/review/requeue/accept protocol; same as CLI requests |
 
-The reads use read-only transactions and never reconcile expired heartbeats. They cannot prove a worker has stopped. Read results are bounded to 2 MiB; reduce the page size for large history. Writes use the same [`request` protocol](protocol.md), optimistic revisions, leases, resource reservations, independent acceptance and privacy checks as the CLI. MCP does not accept process-ID binding.
+The reads use read-only transactions and never reconcile expired heartbeats. They cannot prove a worker has stopped. Read results are bounded to 2 MiB; reduce the page size for large history. Writes use the same [`request` protocol](protocol.md), optimistic revisions, leases, resource reservations, required review for new tasks, and privacy checks as the CLI. `review_contract_version` advertises the lifecycle contract; `review_capabilities` lists supported operations. MCP does not accept process-ID binding. The server records review run metadata but cannot launch a fresh sub-agent or prove its isolation; use the host's actual native launch capability and leave the task pending if none is available.
 
 `shared_task_apply` returns a durable `receipt`. `committed=true` means the request is saved, even when `ok=false` and `projection_updated=false` after an export failure. Retry with the **same request_id and identical original content** to finish projection; never create a new request to repeat an unknown write. Changed payload under the same request ID is rejected. After transport interruption or an ambiguous error, reread the exact task and check the outcome before retrying. MCP cancellation cannot roll back a request already committing in its worker thread.
 

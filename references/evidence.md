@@ -1,6 +1,6 @@
 # Evidence that tells you what was checked
 
-StillRelay 0.3 keeps a reference, a file observation and a source-backed claim distinct. A worker finishing successfully still means `worker_done`, not independent acceptance.
+StillRelay 0.3 keeps a reference, a file observation and a source-backed claim distinct. A worker finishing successfully still means `worker_done`, not independently reviewed acceptance.
 
 ## File references and local checks
 
@@ -60,6 +60,8 @@ Old fact strings are returned as `legacy_unverified` objects with deterministic 
 
 ## Exit codes and existing delegation choices
 
-Task `exit_code` is a worker report; `exit_code_trust` says so, including for old tasks. The bundled foreground runner obtains its direct child's code with `subprocess.wait` and labels its **local result** `exit_code_source=subprocess_wait`. This is not an authenticated remote attestation, process-tree proof, or a correctness check. `accept` requires a different actor and nonempty source/diff/tests/runtime statements; the core does not execute those checks. Actor names are collaboration labels under one user's trust boundary.
+Task `exit_code` is a worker report; `exit_code_trust` says so, including for old tasks. The bundled foreground runner obtains its direct child's code with `subprocess.wait` and labels its **local result** `exit_code_source=subprocess_wait`. This is not an authenticated remote attestation, process-tree proof, or a correctness check. New tasks require a recorded independent review before `accept`; the reviewer's source/diff/tests/runtime statements are evidence for the human or primary agent consuming that result, not checks executed by the core. Actor names and run IDs are collaboration metadata, not authentication or proof of fresh context. The host must actually launch a fresh native sub-agent; unsupported clients leave the task pending. See the [review protocol](protocol.md) for lifecycle and compatibility rules.
+
+The review's output fingerprint covers only files locally checked by `artifact_checks` for the current worker generation. The core reopens and rehashes those files when starting or resuming review, recording a result, and accepting it. Reports and unchecked artifact references are not fingerprinted; without checked files the fingerprint is `null`. These checks detect changes at the time of each lifecycle action, but they do not lock the files or guarantee that external content stays unchanged afterward.
 
 No AST signature checker, additional heartbeat thread or automatic worktree was added. The runner already owns serialized heartbeats; they mean contact, not progress. `acquire_more` remains deferred: retaining one reservation while waiting for another can create circular waits. For now, stop safely, release with evidence, use plan to redeclare the complete resource set, then requeue and claim; all targets are acquired together or none are.

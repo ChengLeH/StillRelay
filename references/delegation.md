@@ -18,9 +18,11 @@ The state MCP records and queries work. It does not choose models, contact arbit
 
 ## Three pieces, one progress record
 
-1. The controller creates a task with goal, constraints, target reservations and acceptance criteria.
-2. The worker or bridge claims it and binds an exact run. It executes locally, keeps detailed logs local, and updates the shared task.
-3. The controller checks compact snapshots at intervals. It verifies selected evidence and independently accepts the result.
+1. The primary agent creates or reuses one task for the work item, with its goal, constraints, target reservations and acceptance criteria.
+2. The worker or bridge claims it and binds an exact run. It executes locally, keeps detailed logs local, and saves meaningful verified progress and its next step.
+3. After successful finish, the host starts a fresh native sub-agent for review. The workflow records its run, checkpoints and result, then a worker or non-reviewer controller accepts a pass. This needs no third agent distinct from the primary worker and reviewer.
+
+StillRelay does not schedule the reviewer or verify context isolation: the host's actual launch must create the separate run, while actor and run IDs are self-reported metadata. If the host cannot launch a native sub-agent, keep the task `worker_done`. New tasks default to required review; older tasks keep legacy acceptance until `review_start` explicitly upgrades them. See the [review lifecycle](protocol.md#requests-and-receipts), including the exact artifact fingerprint scope.
 
 The optional [silent-delegation Skill](../skills/silent-delegation/SKILL.md) teaches that behavior. Install the skill folder through your client's supported skill mechanism; it expects the installed CLI or the configured MCP connection. Do not assume every MCP client automatically loads repository skills.
 

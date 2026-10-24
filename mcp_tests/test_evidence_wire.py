@@ -31,6 +31,10 @@ class EvidenceWireTests(unittest.IsolatedAsyncioTestCase):
                     await client.initialize()
                     status = await client.call_tool('shared_task_status', {})
                     self.assertEqual(status.structured_content['evidence_contract_version'], 1)
+                    self.assertEqual(status.structured_content['review_contract_version'], 1)
+                    self.assertIn('review_resume', status.structured_content['review_capabilities'])
+                    self.assertEqual(status.structured_content['review_execution'],
+                                     'host_supplied_native_subagent')
                     self.assertTrue(status.structured_content['artifact_checks_enabled'])
 
                     async def apply(op, task=None, **values):

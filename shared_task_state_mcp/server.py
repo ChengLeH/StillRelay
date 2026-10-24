@@ -22,7 +22,7 @@ def build_server(config, expected_state_id=None, read_only=False):
         'Silence does not prove termination; release/requeue need stop_confirmed and stop_evidence. '
         'After an unknown outcome, reread the task and replay only the identical request with the same '
         'request_id. committed=true means persistence succeeded even when ok=false. '
-        'Worker completion and independent controller acceptance are separate.'))
+        'Worker completion, independent review, and acceptance are separate lifecycle steps.'))
     readonly = ToolAnnotations(read_only_hint=True, destructive_hint=False,
                                idempotent_hint=True, open_world_hint=False)
 
@@ -66,15 +66,21 @@ def build_server(config, expected_state_id=None, read_only=False):
         @server.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=True,
                                                 idempotent_hint=True, open_world_hint=False))
         async def shared_task_apply(request: dict) -> CallToolResult:
-            """Submit the existing create/plan/claim/bind/update/heartbeat/finish/release/requeue/accept protocol.
+            """Submit the existing task and review lifecycle through the shared request protocol.
 
             Include schema_version=1, unique request_id, actor and op. create needs fields.title and
             fields.goal; declare execution_pool and resources, or read_only=true for unscoped reads.
             Other operations need task_id and expected_revision. Worker operations also need lease_id.
             finish needs integer exit_code; release/requeue need stop_confirmed=true and stop_evidence;
-            requeue also needs resume_evidence. accept needs a different actor and checks containing
-            source/diff/tests/runtime evidence. bind needs execution with executor and run_id, plus optional
-            status_ref/report_ref. See references/protocol.md for the full contract.
+            requeue also needs resume_evidence. New tasks require review: after finish, launch a fresh
+            native sub-agent through the host, then record review_start, review_bind, review_checkpoint,
+            review_result and accept as appropriate. StillRelay records these claims but does not schedule
+            sub-agents or authenticate execution IDs/context isolation. If the host cannot launch one, leave
+            the task worker_done. A passed independent review can be accepted by the worker or another actor
+            who is not the reviewer. Legacy tasks keep the old accept flow until explicit review_start.
+            review_resume requires confirmed stop evidence and rotates the review lease. bind and review_bind
+            need execution with executor and run_id, plus optional status_ref/report_ref. See
+            references/protocol.md for the full contract.
             Cumulative facts/attempts/artifacts/backups merge instead of replace. New verified_facts
             require id, statement, method and sources; source-backed reports are not independently verified.
             finish may include artifact_checks=[{path,sha256}], requiring configured artifact_roots.
