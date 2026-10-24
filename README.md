@@ -21,6 +21,8 @@ StillRelay gives cooperating agents one durable place for tasks, progress and ev
 
 **0.3 evidence update:** shorter updates no longer erase accumulated facts, attempts, artifact references or backups; retractions keep the original and explain why it was withdrawn. New `verified_facts` writes need an ID, statement, checking method and sources. Old fact strings read as `legacy_unverified`. Optional local SHA-256 checks run only when an administrator configures `artifact_roots`; ordinary artifact references remain unverified, and a recorded file check does not certify a claim or preserve an immutable copy. Update clients that write string facts before using 0.3. [Evidence contract](references/evidence.md) · [v0.3.0 release and pinned upgrade steps](docs/releases/0.3.0.md).
 
+**0.3.1 review update:** new tasks keep the independent reviewer’s lease, run binding, checkpoints and result in shared history. Interrupted reviews can resume after stop confirmation; stale results are rejected against the current worker result. Existing tasks keep their legacy acceptance path until review starts. StillRelay records review claims; the host must launch the reviewer. [v0.3.1 changes and upgrade steps](docs/releases/0.3.1.md).
+
 ## Less log reading, measured
 
 We ran nine local trials on 0.2 with two MCP clients and three command phases per task. Quiet supervision kept the same state checks and skipped reading the worker's full log after each phase. These figures have not been rerun for the 0.3 evidence format.
