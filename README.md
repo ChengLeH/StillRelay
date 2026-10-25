@@ -35,28 +35,42 @@ We ran nine local trials on 0.2 with two MCP clients and three command phases pe
 
 These are **supervisor-visible tool payloads**, counted with `o200k_base`, three trials per case. They are not total model-token or billing savings: no model inference was used, worker traffic is excluded, and results depend on log volume and check frequency. [Method and rerun instructions](benchmarks/README.md) · [Results and raw transcripts](benchmarks/results/2026-10-23/summary.md)
 
+## Start with the primary agent
+
+For an existing shared state, follow [SKILL.md](SKILL.md) and make only the minimum configuration/overview lookup needed to find the shared state and exact task. Immediately after creating or reusing the task, record that lookup and result as its first checkpoint, before any local checks or other local work; run any needed `join` or `doctor` checks under that task. For a first-time setup, perform only the local steps needed to make the shared state available. Once available, the primary agent creates the first task and records the setup actions and results, including the installation/configuration and whichever `init` or `bootstrap` path was used, before any other local work.
+
+1. The primary agent bootstraps only when no shared state exists; other agents join the existing state. Never initialize a separate database per agent.
+2. Under the active task, run `python3 scripts/state.py join` or `python3 scripts/state.py doctor` only when needed to validate shared-state access and identity.
+3. Check that participants can access the same configuration, database, and exchange directory, and record each agent's actual read, write, and execution permissions in the task.
+4. Continue by exact task ID and save verified results and the next action.
+
+Agents with command execution use `request --stdin` to commit and export directly. **No daemon is needed.** The shared file channel is disabled by default; see Keep secrets out of the shared notebook below for requirements and migration.
+
 ## Connect through MCP
 
 For MCP-capable clients such as Antigravity or Hermes, install the optional local server from this repository using [uv](https://docs.astral.sh/uv/guides/tools/):
 
+Before running these local setup commands, follow the task sequence in [Start with the primary agent](#start-with-the-primary-agent). With existing state, create or reuse the task and record the minimum lookup before installing the MCP package. For a first-time setup, only install and initialize far enough to make shared state available; immediately create the first task and record those setup actions before configuring the client.
+
 ```sh
 uv tool install 'git+https://github.com/ChengLeH/StillRelay@main'
+```
+
+Run `init` only when no shared state exists. Existing-state users skip it and select their current configuration with `--config /absolute/path/config.json` before the subcommand when needed.
+
+```sh
 shared-task-state-mcp init
+```
+
+After `init` succeeds on a first-time setup, stop and create the first task. Record the package installation and initialization actions and their results there before running the next command. Existing-state users should already have recorded the lookup before the package installation.
+
+Then generate the client entry. Merge it into the existing client settings and reload MCP; use `--client hermes` for Hermes.
+
+```sh
 shared-task-state-mcp client-config --client antigravity
 ```
 
-Run `init` once for a **new** installation. If you already have task state, select its configuration with `--config /absolute/path/config.json` before the subcommand; do not create a second state. Merge the generated server entry into your client's existing settings, then reload MCP. Use `--client hermes` for Hermes. The generated binding includes the existing state UUID and the installed runtime's absolute path; no hand-written Python paths are needed.
-
 The server uses stdio, exposes structured task and supervision tools, and opens no network port. Every client accesses the same configured database. `--read-only` removes the mutation tool entirely. This MCP installation adds the official Python MCP SDK; the standalone skill/CLI below remains standard-library-only. See the [MCP installation guide, client examples, and copyable agent prompt](references/mcp.md).
-
-## Start with the primary agent
-
-1. Verify that participants can access the same configuration, database, and exchange directory. Check each agent's actual read, write, and execution permissions.
-2. The primary agent runs `python3 scripts/state.py bootstrap` once. Other agents use `python3 scripts/state.py join` to validate and join that existing state. Do not initialize a database per agent.
-3. Run `python3 scripts/state.py doctor` to check that configuration, database, and exchange share the same `state_id`. File-only agents need an input-validating tool or gateway before writing shared files.
-4. Follow [SKILL.md](SKILL.md). Continue by exact task ID and save verified results and the next action.
-
-Agents with command execution use `request --stdin` to commit and export directly. **No daemon is needed.** The shared file channel is disabled by default; see Keep secrets out of the shared notebook below for requirements and migration.
 
 ## Bootstrap and join
 

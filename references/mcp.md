@@ -4,6 +4,8 @@
 
 The optional `shared-task-state-mcp` package runs on the same host as your task state. Each MCP client launches its own stdio process; the processes share one configured SQLite database and the existing task protocol. No account, API key, network listener, dispatcher, or proprietary Host installation is needed.
 
+Track this setup as one local work item. First make only the minimum configuration/overview lookup needed to find the existing state and task; create or reuse the task, then immediately record that lookup as its first checkpoint. For a first-time installation, do only what is needed to make shared state available, then create the first task and record the actual setup actions and results, including the `init` or bootstrap path, before further local work. Continue the same task through client configuration, reload, and status verification; do not create a separate task just to test the connection.
+
 ## Install
 
 Requires Python 3.10+ and [uv](https://docs.astral.sh/uv/getting-started/installation/). On macOS, Linux, or Windows:
@@ -102,7 +104,7 @@ The package retains the core credential guard and any configured offline `privac
 
 Give a local agent with installation and settings-write permissions this prompt:
 
-> Install the Shared Task State MCP from https://github.com/ChengLeH/StillRelay using a persistent uv tool install pinned to a reviewed Git commit. Find my existing shared task configuration first; do not initialize another database. If no state exists, ask whether this is a new installation before running `shared-task-state-mcp init`. Generate the appropriate configuration with `client-config --client antigravity` (or `hermes`), merge only that server entry into my existing client settings, preserve the other entries, reload MCP, and verify `shared_task_status` against the expected state UUID. Do not create a task as a connection test. Keep local config, database, credentials and backups out of Git.
+> Set this up as one tracked local work item. First make only the minimum configuration/overview lookup needed to find the existing shared state and exact task; create or reuse that task and immediately record the lookup as its first checkpoint. If no shared state exists, ask before initializing it. For a new installation, do only the setup required to make the state available; then create the first task and immediately record the actual installation/configuration actions and results, including whether `init` or another bootstrap path was used. Continue under the same task while installing the MCP, generating and merging only the server entry, reloading MCP, and verifying `shared_task_status` against the expected state UUID. Do not create a separate task solely as a connection test. Keep local config, databases, credentials, and backups out of Git.
 
 This is an instruction for an agent that can edit local settings, not a claim of a built-in natural-language installer or marketplace listing. The automated acceptance test covers the installed package and actual MCP transport; Antigravity/Hermes application UI sessions require validation on the user's installed clients.
 
