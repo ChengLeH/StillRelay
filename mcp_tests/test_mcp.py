@@ -149,6 +149,8 @@ class WireTests(unittest.IsolatedAsyncioTestCase):
                     response = await client.call_tool('shared_task_apply', {'request': req})
                     self.assertFalse(response.is_error, response)
                     task = response.structured_content['receipt']['task']
+                    rejected = await client.call_tool('shared_task_apply', {'request': {**req, 'request_id': uuid.uuid4().hex, 'process_group': 123}})
+                    self.assertTrue(rejected.is_error)
                     cli = subprocess.run([sys.executable, '-m', 'shared_task_state.state', '--config', str(config),
                                           'read', task['task_id']], cwd=tmp, capture_output=True, text=True, timeout=20)
                     self.assertEqual(cli.returncode, 0, cli.stderr)

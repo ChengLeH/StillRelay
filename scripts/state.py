@@ -328,6 +328,12 @@ def process_state(pid,birth):
     if state=='alive' and current!=birth:return 'stopped'
     return state
 
+def process_group_state(group):
+    if not isinstance(group,int) or isinstance(group,bool) or group<=0 or os.name!='posix':return 'unknown'
+    try:os.killpg(group,0);return 'alive'
+    except ProcessLookupError:return 'stopped'
+    except OSError:return 'unknown'
+
 
 class Store:
     def __init__(self, config, initialize=False, readonly=False):
@@ -475,10 +481,12 @@ class Store:
             raise StateError('explicit stop_confirmed and stop_evidence required; silence is not proof')
         if process_state(task.get('pid'),task.get('pid_birth'))=='alive':
             raise StateError('original worker still alive; reservation retained')
+        if task.get('process_group') and process_group_state(task['process_group'])!='stopped':
+            raise StateError('worker process group still alive or unknown; reservation retained')
         task['stop_evidence']=scrub(evidence)
         task['reservation_active']=False
         task['retired_lease_id']=task.get('lease_id')
-        task.update(lease_id=None,pid=None,pid_birth=None)
+        task.update(lease_id=None,pid=None,pid_birth=None,process_group=None)
 
     def declaration(self, request, task=None):
         result={}
@@ -501,7 +509,8 @@ class Store:
             for task in self.all():
                 if task['status']!='running':continue
                 fresh=time.time()-task.get('heartbeat_epoch',0)<=self.ttl
-                if not fresh and process_state(task.get('pid'),task.get('pid_birth'))!='alive':
+                group=task.get('process_group')
+                if not fresh and process_state(task.get('pid'),task.get('pid_birth'))!='alive' and (not group or process_group_state(group)=='stopped'):
                     task.update(status='interrupted',outcome_unknown=True,reservation_active=True,
                                 interruption='heartbeat expired; reservation retained until confirmed stopped')
                     self.save(task,'runtime','interrupted');changed.append(task['task_id'])
@@ -627,10 +636,20 @@ class Store:
                         if task.get("pid") and (task["pid"] != request["pid"] or task["pid_birth"] != birth):
                             raise StateError("cannot replace a bound worker PID")
                         task.update(pid=request["pid"], pid_birth=birth)
+                    if 'process_group' in request:
+                        group=request['process_group']
+                        if op!='heartbeat' or not isinstance(group,int) or isinstance(group,bool) or group<=0 or group!=task.get('pid') or os.name!='posix':
+                            raise StateError('process group must match the bound POSIX worker PID')
+                        try:actual=os.getpgid(group)
+                        except OSError:raise StateError('worker process group unavailable')
+                        if actual!=group or task.get('process_group') not in (None,group):raise StateError('worker process group mismatch')
+                        task['process_group']=group
                     task["heartbeat_epoch"] = time.time()
                     if op in {"finish", "release"}:
                         if op == "release":self.confirm_stopped(task,request)
                         if op == "finish":
+                            if task.get('process_group') and process_group_state(task['process_group'])!='stopped':
+                                raise StateError('worker process group still alive or unknown; reservation retained')
                             task["reservation_active"]=False
                             observed = evidence.inspect_files(request.get('artifact_checks', []),
                                                               self.config.get('artifact_roots', []), task, actor)
@@ -666,7 +685,7 @@ class Store:
                                         outcome_unknown=exit_code != 0)
                         else:
                             task.update(status="interrupted", outcome_unknown=True)
-                        task.update(retired_lease_id=task.get("lease_id") or task.get("retired_lease_id"), lease_id=None, pid=None, pid_birth=None)
+                        task.update(retired_lease_id=task.get("lease_id") or task.get("retired_lease_id"), lease_id=None, pid=None, pid_birth=None,process_group=None)
                 elif op == "plan":
                     save_task = True
                     if task.get("reservation_active"):

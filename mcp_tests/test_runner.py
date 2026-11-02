@@ -18,6 +18,31 @@ from shared_task_state_mcp.backend import Backend
 
 
 class RunnerTests(unittest.TestCase):
+    @unittest.skipUnless(os.name=='posix','POSIX process group required')
+    def test_native_group_bind_failure_never_starts_command(self):
+        marker=self.base/'should-not-run'
+        with mock.patch.object(Backend,'_apply_native_worker_binding',side_effect=OSError('unavailable')):
+            result=self.run_command([sys.executable,'-c',f'open({str(marker)!r},"w").write("bad")'])
+        self.assertEqual(result['status'],'reservation_retained');self.assertFalse(marker.exists());self.assertTrue(self.current()['reservation_active'])
+    @unittest.skipUnless(os.name=='posix','POSIX process group required')
+    def test_gate_cannot_be_shadowed_by_the_worker_directory(self):
+        package=self.base/'shared_task_state_mcp';package.mkdir();(package/'__init__.py').write_text('')
+        marker=self.base/'shadow-ran';(package/'group_gate.py').write_text(f'open({str(marker)!r},"w").write("bad")')
+        result=self.run_command([sys.executable,'-c','pass'],cwd=self.base)
+        self.assertEqual(result['status'],'worker_done');self.assertFalse(marker.exists())
+    @unittest.skipUnless(os.name=='posix','POSIX process group required')
+    def test_background_child_prevents_finish_and_retains_reservation(self):
+        child_file=self.base/'background.pid'
+        code="import os,sys,time\np=os.fork()\nif p:\n open(sys.argv[1],'w').write(str(p));os._exit(0)\ntime.sleep(30)"
+        result=self.run_command([sys.executable,'-c',code,str(child_file)])
+        try:
+            self.assertEqual(result['status'],'reservation_retained')
+            task=self.current();self.assertTrue(task['reservation_active']);self.assertTrue(task.get('process_group'))
+            self.assertEqual(state.process_group_state(task['process_group']),'alive')
+        finally:
+            if child_file.exists():
+                try:os.kill(int(child_file.read_text()),signal.SIGKILL)
+                except ProcessLookupError:pass
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="runner tests ")
         self.addCleanup(self.temp.cleanup)
@@ -85,7 +110,8 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(task["delegation"]["generation"], 1)
         self.assertEqual(task["delegation"]["executor"], "command")
         self.assertEqual(task["delegation"]["run_id"], result["run_id"])
-        self.assertEqual(actions, ["create", "claim", "bind", "finish"])
+        self.assertEqual([a for a in actions if a!='heartbeat'],["create", "claim", "bind", "finish"])
+        if os.name=='posix':self.assertGreaterEqual(actions.count('heartbeat'),1)
         self.assertIn(local_secret, Path(result["logs"]["stdout"]).read_text())
         self.assertIn("local-stderr", Path(result["logs"]["stderr"]).read_text())
         self.assertNotIn(local_secret, json.dumps(result))
@@ -288,6 +314,7 @@ finally:
             def __init__(self):
                 self.returncode = None
                 self.terminated = False
+                self.pid = 123456
 
             def poll(self):
                 return self.returncode
@@ -307,8 +334,18 @@ finally:
                 self.returncode = -signal.SIGKILL
 
         child = SignalOnWait()
-        with mock.patch.object(runner.subprocess, "Popen", return_value=child):
-            result = self.run_command([sys.executable, "-c", "pass"])
+        original_mutate=runner._mutate
+        def simulated_binding(*args,**kwargs):
+            if kwargs.get('native_binding'):return ({'pid':child.pid},None)
+            return original_mutate(*args,**kwargs)
+        def fake_popen(*args,**kwargs):
+            if kwargs.get('pass_fds'):child.gate_fd=os.dup(kwargs['pass_fds'][0])
+            return child
+        try:
+            with mock.patch.object(runner.subprocess, "Popen", side_effect=fake_popen), mock.patch.object(runner,'_mutate',side_effect=simulated_binding):
+                result = self.run_command([sys.executable, "-c", "pass"])
+        finally:
+            if hasattr(child,'gate_fd'):os.close(child.gate_fd)
 
         task = self.current()
         actions = [event["action"] for event in self.events()]

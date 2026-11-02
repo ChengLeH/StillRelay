@@ -10,6 +10,7 @@ import tempfile
 import time
 import unittest
 import uuid
+from unittest.mock import patch
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts/state.py"
 spec = importlib.util.spec_from_file_location("shared_state", SCRIPT)
@@ -18,6 +19,33 @@ spec.loader.exec_module(state)
 
 
 class StateTests(unittest.TestCase):
+    @unittest.skipIf(os.name == 'nt','process groups use POSIX semantics')
+    def test_bound_process_group_keeps_reservation_until_group_stops(self):
+        worker=subprocess.Popen([sys.executable,'-c','import time;time.sleep(30)'],start_new_session=True)
+        try:
+            task=self.claim(self.create())
+            task=self.store.apply(self.request('heartbeat',task=task,pid=worker.pid,process_group=worker.pid))['task']
+            self.assertEqual(task['process_group'],worker.pid)
+            with self.assertRaisesRegex(state.StateError,'group'):
+                self.store.apply(self.request('finish',task=task,exit_code=0))
+            with self.assertRaisesRegex(state.StateError,'alive'):
+                self.store.apply(self.request('release',task=task))
+            with patch.object(state,'process_state',return_value='stopped'),patch.object(state,'process_group_state',return_value='alive'):
+                with self.store.transaction():
+                    task['heartbeat_epoch']=0;self.store.save(task,'test','expire')
+                self.store.reconcile()
+            task=self.store.get(task['task_id']);self.assertEqual(task['status'],'running')
+            with patch.object(state.os,'killpg',side_effect=PermissionError()):
+                self.assertEqual(state.process_group_state(worker.pid),'unknown')
+                with self.assertRaisesRegex(state.StateError,'group'):
+                    self.store.apply(self.request('finish',task=task,exit_code=0))
+            task=self.store.apply(self.request('heartbeat',task=task))['task']
+            worker.terminate();worker.wait(timeout=5)
+            task=self.store.get(task['task_id'])
+            done=self.store.apply(self.request('finish',task=task,exit_code=0))['task']
+            self.assertEqual(done['status'],'worker_done');self.assertIsNone(done['process_group'])
+        finally:
+            if worker.poll() is None:worker.terminate();worker.wait(timeout=5)
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         base = Path(self.temp.name)

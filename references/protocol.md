@@ -73,6 +73,8 @@ Paths are revalidated at admission. Do not add or remove targets during executio
 
 Heartbeat expiry does not automatically release targets. Interrupted tasks retain `reservation_active`; unknown side effects are marked by `outcome_unknown`. Confirm stopping and inspect side effects before handing work over. If native checks cannot establish termination, require explicit operator confirmation. Missing PIDs or unavailable process inspection do not prove stopping.
 
+On POSIX, a trusted local CLI caller that starts an isolated process group may bind it with the first heartbeat using both `pid` and `process_group`, with equal values. The process must already be its group leader. The native command runner binds its group before starting the requested command. The public MCP apply endpoint continues to reject caller-supplied PIDs and groups. Finish and release retain the reservation while that group exists or cannot be checked; expired heartbeats do not release a live group. This is optional and preserves existing clients. It covers the bound group only: processes that deliberately leave the group require separate supervision. Windows clients keep the existing PID and retained-reservation behavior.
+
 Stop evidence must cover the current agent and child workers it started, stating how cessation of modifying work was checked, the result, and any reason for manual clearing. Resume evidence additionally explains whether external actions took effect and where work can safely continue. Successful finish is not acceptance; a recorded review result does not replace the primary agent's judgment about the evidence.
 
 ## File-only channel
