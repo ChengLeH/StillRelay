@@ -4,6 +4,8 @@
 
 這個可選套件讓各代理在存放任務狀態的同一台電腦上，啟動自己的 stdio（標準輸入／輸出）程序，共用同一份 SQLite（交易式資料庫）與既有任務協定。不需要帳號、API 金鑰、網路埠或本專案作者的私人 Host（主機）環境。
 
+這整段接入流程視為一項本機工作，使用同一筆共用任務追蹤。先只做辨識既有狀態和任務所需的最少設定／總覽查詢；建立或沿用任務後，立即把查詢結果記為第一個檢查點。首次安裝時，只先做讓共用狀態可用所需的設定；狀態可用後，立刻建立第一筆任務，記錄實際安裝／設定動作、結果，以及使用的 `init`／`bootstrap` 路徑，再進行其餘本機工作。後續用同一筆任務記錄用戶端設定、重新載入及狀態驗證，不為連線測試另開任務。
+
 ## 安裝
 
 需要 Python 3.10 以上與 [uv 套件工具](https://docs.astral.sh/uv/getting-started/installation/)。macOS、Linux、Windows 使用相同指令：
@@ -101,7 +103,7 @@ shared-task-state-mcp client-config --client hermes
 
 ## 可直接交給本機代理的提示詞
 
-> 請從 https://github.com/ChengLeH/StillRelay 安裝 Shared Task State MCP，使用持續保留的 uv 工具環境並固定到已檢查的 Git 提交。先找我既有的共用任務設定，不另建資料庫。只有確認沒有既有狀態時，才詢問是否全新安裝，再執行 `shared-task-state-mcp init`。用 `client-config --client antigravity`（Hermes 則用 `hermes`）產生設定，只合併該伺服器項目到目前用戶端設定，保留其他項目。重新載入 MCP 後呼叫 `shared_task_status`，確認狀態 UUID 與原本一致，不用建立任務測試連線。不要把本機設定、資料庫、憑證或備份提交到 Git。
+> 請把這次接入視為一項本機工作，記錄在同一筆共用任務中。先只做找出既有共用狀態和確切任務所需的最少設定／總覽查詢；建立或沿用任務後，立即把查詢結果記為第一個檢查點。若不存在共用狀態，先詢問我是否要初始化。首次安裝只做讓共用狀態可用所需的步驟；狀態可用後，立刻建立第一筆任務，並記錄實際安裝／設定動作和結果，包括使用 `init` 或其他 bootstrap 路徑。接著在同一筆任務下安裝 MCP、用 `client-config --client antigravity`（Hermes 則用 `hermes`）產生並合併該伺服器項目、重新載入 MCP，再呼叫 `shared_task_status` 確認狀態 UUID。不要為了測試連線另開任務。不要把本機設定、資料庫、憑證或備份提交到 Git。
 
 代理需有安裝及修改本機設定的權限；這不是宣稱用戶端內建任意 GitHub MCP 的自然語言安裝器，也不是商店上架。自動化測試驗證已安裝套件與實際 MCP 協定；Anti-Gravity／Hermes 應用程式畫面的完整連線仍需在使用者實際版本驗證。
 
