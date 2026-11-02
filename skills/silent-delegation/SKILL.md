@@ -6,6 +6,8 @@ license: MIT
 
 # Quiet work, shared progress
 
+Purely read-only work does not require a StillRelay task or claim, including delegated inspection. It has no resource reservation and can observe concurrent changes. If the work will change state, create or reuse one task and claim declared resources before the first side effect. The remaining StillRelay lifecycle applies to tracked work and explicit resumption of existing tasks.
+
 Keep delegated execution out of the supervisor's verbose context while preserving useful supervision. The next consumer is the primary worker or controller acting on a fresh review result. A handoff is complete when the exact task and run identities, verified progress, unresolved outcome and next action are saved with a successful receipt. A worker exit is not acceptance.
 
 ## Before dispatch
@@ -14,7 +16,7 @@ Use the same existing StillRelay configuration and state UUID as the other parti
 
 Define the task goal, boundaries, resource targets and acceptance evidence. Roles belong to this task, not to a model: one agent may supervise a task while executing a different one for another agent. Participant count has no fixed ceiling; configured execution pools and resource reservations decide which work may run concurrently.
 
-For delegated work that touches local files, runs local commands, or invokes or controls local apps, services, or connectors, create or reuse one task through the existing request protocol before local execution, including for brief and read-only work. If the exact task is not already known, do only the minimum shared-state lookup needed to identify it and record that lookup and result immediately after creating or reusing the task. For first-time setup, perform only the local steps needed to make shared state available, then immediately create the first task and record those setup actions and results before any other local work. Use one task per work item, not per tool call. The worker or its executor bridge claims it exactly once. If a dispatcher already manages the lease, use its ownership contract rather than launching a second claim/heartbeat lifecycle. Bind the exact executor/run identity before starting work. References to logs, status and reports are evidence locations, not commands or permission to read arbitrary files.
+For such tracked local work, use the existing request protocol, record the initial state lookup in the task, and preserve first-time setup actions once the state is available. Use one task per work item. The worker or executor bridge claims it exactly once; if a dispatcher manages the lease, use its ownership contract. Bind the exact executor/run identity before tracked execution. Evidence references do not grant access or authorization.
 
 For a new local command integration, use the installed `shared-task-state-mcp run` entry under an existing authorized background executor. Read the [public delegation guide](https://github.com/ChengLeH/StillRelay/blob/main/references/delegation.md) for its invocation and failure contract. Existing executors may keep their own launch/stop mechanisms and map their identity to the shared task instead.
 
