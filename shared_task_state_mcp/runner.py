@@ -10,6 +10,7 @@ from pathlib import Path
 import signal
 import stat
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -198,7 +199,7 @@ def _release(backend, task_id, actor, lease_id, generation, executor, run_id,
 
 
 def _mutate(backend, task_id, actor, lease_id, generation, executor, run_id,
-            op, values, completed, retry_conflict=False):
+            op, values, completed, retry_conflict=False, native_binding=False):
     """Apply from a fresh revision; resolve unknown outcomes by reading state."""
     for attempt in range(2 if retry_conflict else 1):
         current = _read(backend, task_id)
@@ -206,7 +207,7 @@ def _mutate(backend, task_id, actor, lease_id, generation, executor, run_id,
             return None, current
         request = _request(op, task_id, actor, current, lease_id, **values)
         try:
-            outcome = backend.apply(request)
+            outcome = backend._apply_native_worker_binding(request) if native_binding else backend.apply(request)
         except _RunnerSignal:
             raise
         except Exception as exc:
@@ -458,10 +459,21 @@ def run(config, task_id, actor, command, cwd=None, executor="command",
         try:
             with _signals():
                 spawn_attempted = True
+                gate_read = gate_write = None
                 try:
-                    process = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.DEVNULL,
-                                               stdout=out, stderr=err, shell=False)
+                    if os.name=='posix':
+                        gate_read,gate_write=os.pipe()
+                        gate=Path(__file__).resolve().with_name('group_gate.py')
+                        process=subprocess.Popen([sys.executable,'-I',str(gate),str(gate_read),*argv],
+                                                 cwd=cwd,stdin=subprocess.DEVNULL,stdout=out,stderr=err,shell=False,
+                                                 start_new_session=True,pass_fds=(gate_read,))
+                        os.close(gate_read);gate_read=None
+                    else:
+                        process = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.DEVNULL,
+                                                   stdout=out, stderr=err, shell=False)
                 except (OSError, ValueError):
+                    if gate_read is not None:os.close(gate_read)
+                    if gate_write is not None:os.close(gate_write)
                     released, current = _release(
                         backend, task_id, actor, lease_id, generation, executor, run_id,
                         True, "No child process was created; command launch failed.",
@@ -470,6 +482,23 @@ def run(config, task_id, actor, command, cwd=None, executor="command",
                                    current.get("reservation_active", True) if current else not released,
                                    logs, task_status=current.get("status") if current else None,
                                    error="command_launch_failed" if released else "launch_outcome_unknown")
+
+                if gate_write is not None:
+                    try:
+                        def group_bound(task,_previous):
+                            return bool(_bound(task,task_id,actor,lease_id,generation,executor,run_id)
+                                        and task.get('pid')==process.pid and task.get('process_group')==process.pid)
+                        bound_group,current=_mutate(backend,task_id,actor,lease_id,generation,executor,run_id,
+                                                    'heartbeat',{'pid':process.pid,'process_group':process.pid},
+                                                    group_bound,retry_conflict=True,native_binding=True)
+                        if bound_group is None:
+                            _stop_child(process)
+                            return _result(task_id,run_id,'reservation_retained',True,logs,
+                                           task_status=current.get('status') if current else None,
+                                           error='process_group_binding_unknown')
+                        os.write(gate_write,b'1')
+                    finally:
+                        os.close(gate_write);gate_write=None
 
                 due = time.monotonic() + interval
                 while True:

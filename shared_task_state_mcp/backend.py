@@ -99,8 +99,16 @@ class Backend:
             return self.protect(store, state.supervise(store, task_ids, after_seq))
 
     def apply(self, request):
-        if not isinstance(request, dict) or 'pid' in request:
+        if not isinstance(request, dict) or 'pid' in request or 'process_group' in request:
             raise state.StateError('request object required; worker PIDs are not accepted through MCP')
+        return self._apply_request(request)
+
+    def _apply_native_worker_binding(self, request):
+        if not isinstance(request,dict) or request.get('op')!='heartbeat' or not request.get('pid') or request.get('process_group')!=request.get('pid'):
+            raise state.StateError('invalid native worker binding')
+        return self._apply_request(request)
+
+    def _apply_request(self, request):
         with self.store(readonly=False) as store:
             receipt = store.apply(request)
             try:

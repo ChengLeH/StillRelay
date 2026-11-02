@@ -49,3 +49,5 @@ class IdentityBoundaryTests(unittest.TestCase):
         with self.assertRaisesRegex(state.StateError, 'PIDs are not accepted'):
             self.backend.apply({'pid': 123})
         self.assertEqual(self.backend.status()['total_tasks'], 0)
+        with self.assertRaisesRegex(state.StateError, 'PIDs are not accepted'):
+            self.backend.apply({'process_group': 123})

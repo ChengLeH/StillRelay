@@ -1,7 +1,7 @@
 ---
 name: shared-task-state
 license: MIT
-description: Maintain one shared task record, reserve declared resources, and resume verified work across cooperating agents on one host.
+description: Track local work that changes state, and resume or supervise existing shared tasks across agents. Purely read-only work does not require a task.
 ---
 
 [English](SKILL.md) | [繁體中文](SKILL.zh-TW.md)
@@ -12,13 +12,15 @@ description: Maintain one shared task record, reserve declared resources, and re
 
 ## 先確認共用位置
 
-依 `--config` 或 `SHARED_TASK_STATE_CONFIG` 加入既有狀態。首次才由管理者 `bootstrap`；已有設定不重新建立或改址。執行 `join` 與 `doctor` 驗證狀態身分及存取能力。無法讀取共同位置時，回報缺少的權限，不另建資料庫宣稱已加入。初始化說明見 [README.zh-TW.md](README.zh-TW.md)。
+需要追蹤狀態變更或明確續接既有任務時，依 `--config` 或 `SHARED_TASK_STATE_CONFIG` 加入既有狀態。只有主要代理可建立第一份狀態；已有設定時不得重建或改址。尚未掌握確切任務時，只進行找到既有狀態與任務所需的最少設定／總覽查詢。建立或沿用任務後，立即把查詢與結果記為第一個檢查點，再做其他本機工作；必要的 join 或 doctor 檢查也記在該任務下。首次設定時，只做讓共用狀態可用所需的本機步驟；狀態可用後，立刻建立第一筆任務，並記錄實際執行的安裝／設定動作及結果，包括使用的 `init` 或 `bootstrap` 路徑，再做其他本機工作。無法讀取共同位置時，回報缺少的權限，不另建資料庫宣稱已加入。初始化說明見 [README.zh-TW.md](README.zh-TW.md)。
 
 優先使用 `scripts/state.py request --stdin`，將要求直接傳入，不先存共享檔案。純檔案通道預設停用；只有管理者提供寫入前過濾入口才能安全接入。升級前確認既有 inbox 使用者已改直接提交。憑證不得作為識別碼或防撞目標。選配掃描器失敗時停止保存。詳見 README 的「憑證與安全提交」。
 
 ## 日常流程
 
-可能跨回合或需要交接的非瑣碎工作，開始前建立一筆任務，或沿用既有總任務；不要每次工具呼叫都建立新任務。每個有意義的確認檢查點保存證據與下一步。新任務必須獨立審查。工作結束後，透過 Host 原生能力實際啟動全新子代理，再以 `review_start`、`review_bind` 記錄其執行，並保存檢查點與結果。工作者可以接受通過的審查。用戶端無法啟動原生子代理時，讓結果保持 `worker_done`。StillRelay 只記錄執行 ID，無法證明上下文全新或身分已認證；只有 Host 實際啟動才能建立獨立執行。詳見[審查協定](references/protocol.zh-TW.md)。
+純唯讀工作不需要建立或接單 StillRelay 任務，包括本機讀檔、查詢與盤查；不要只為記錄唯讀調查或審查而建立工單。唯讀可能看到其他工作同時變更的內容；除既有任務明確預約外，StillRelay 不提供讀取期間的資源保護。唯讀調查後若需要寫入或其他副作用，必須在動作前建立或沿用一筆任務，申報目標並取得執行權。修改本機檔案、設定、服務或外部狀態的工作，使用同一工作的單筆任務，不按工具呼叫拆單。識別既有任務時只做最少狀態查詢，建立或沿用後立即記為第一個檢查點。首次設定只先做讓共用狀態可用所需的步驟，再建立第一筆任務並記錄設定與 init 或 bootstrap 路徑。純雲端的變更工作仍依非瑣碎且可能跨回合或交接的門檻建立任務。保存有意義的驗證進度與下一步。新任務仍須由 Host 實際啟動全新子代理獨立審查，透過 review_start 與 review_bind 記錄；無法啟動時保留 worker_done。StillRelay 不能憑自報資料證明隔離。詳見[審查協定](references/protocol.zh-TW.md)。
+
+以下步驟只適用於受追蹤的狀態變更工作或明確續接既有任務；純唯讀工作跳過。
 
 1. 先讀總覽，需要詳細判斷才讀確切任務 ID。確認產生時間、版本與最後確認步驟；不要從近似標題猜身分。
 2. 讀目標、限制、已驗證事實、失敗方法、下一步與證據位置。只重查影響下一步的漂移，不重做已完成調查。
